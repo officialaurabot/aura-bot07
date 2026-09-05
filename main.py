@@ -1593,6 +1593,7 @@ def get_leaderboard_users():
     for user_id, user_data in users.items():
         is_fake = user_data.get("is_fake", False)
         
+        # ✅ Agar fake hai aur show_fake False hai to skip
         if is_fake and not show_fake:
             continue
         
@@ -5631,6 +5632,7 @@ def main():
     print("✅ 15-20 PLAYERS EK SAATH FAST")
     print("✅ DEVICE TRACKING FIXED")
     print("✅ NEW PLAYERS STATS FIXED")
+    print("✅ LEADERBOARD FIXED")
     print("✅ ALL ERRORS FIXED")
     print("=" * 50)
     app.run_polling()
