@@ -317,7 +317,7 @@ ACHIEVEMENTS = {
 }
 
 # ==========================================
-# ⭐ ACHIEVEMENTS HELPER FUNCTIONS (FIXED)
+# ⭐ ACHIEVEMENTS HELPER FUNCTIONS
 # ==========================================
 
 def get_rarity_emoji(rarity):
@@ -344,7 +344,6 @@ def get_rarity_label(rarity):
     }
     return rarity_map.get(rarity, "Common")
 
-# ✅ FIXED: very_rare ko bhi rare mein add karo
 def get_rare_achievements(unlocked_list):
     rare = []
     for name in unlocked_list:
@@ -2086,7 +2085,7 @@ def get_stats_banner_with_level(win, loss, level, period, category, num1, num2, 
     return banner
 
 # ==========================================
-# ⭐ NEW PLAYERS STATS - ADMIN/Super Admin
+# ⭐ NEW PLAYERS STATS - FIXED
 # ==========================================
 
 async def new_players_stats(update, context):
@@ -2129,6 +2128,9 @@ async def new_players_stats(update, context):
                         'joined': user_data.get('joined', '')
                     })
         
+        today_str = datetime.now().strftime('%d-%m-%Y')
+        today_time = datetime.now().strftime('%I:%M %p')
+        
         msg = f"""
 📊 *NEW PLAYERS STATS*
 ━━━━━━━━━━━━━━━━━━━━━━
@@ -2137,14 +2139,13 @@ async def new_players_stats(update, context):
 ├─ Total: {total_players}
 
 ━━━━━━━━━━━━━━━━━━━━━━
-📅 *TODAY ({datetime.now().strftime('%d-%m-%Y')})*
+📅 *TODAY ({today_str})*
 ├─ New Players: {len(today_players)}
 """
         
         if today_players:
             for i, p in enumerate(today_players[:20], 1):
                 username = p.get('username', 'Unknown')
-                name = p.get('name', 'Unknown')
                 uid_display = p.get('id', '')
                 msg += f"\n{i}. @{username} (ID: {uid_display})"
             if len(today_players) > 20:
@@ -2152,16 +2153,16 @@ async def new_players_stats(update, context):
         else:
             msg += "\n📭 No new players today"
         
+        yesterday_str = yesterday
         msg += f"""
 ━━━━━━━━━━━━━━━━━━━━━━
-📅 *YESTERDAY ({yesterday})*
+📅 *YESTERDAY ({yesterday_str})*
 ├─ New Players: {len(yesterday_players)}
 """
         
         if yesterday_players:
             for i, p in enumerate(yesterday_players[:10], 1):
                 username = p.get('username', 'Unknown')
-                name = p.get('name', 'Unknown')
                 uid_display = p.get('id', '')
                 msg += f"\n{i}. @{username} (ID: {uid_display})"
             if len(yesterday_players) > 10:
@@ -2169,17 +2170,17 @@ async def new_players_stats(update, context):
         else:
             msg += "\n📭 No new players yesterday"
         
-        msg += """
+        msg += f"""
 ━━━━━━━━━━━━━━━━━━━━━━
 👑 *Admin:* @{update.effective_user.username}
-🕐 *Report Time:* {datetime.now().strftime('%I:%M %p')}
+🕐 *Report Time:* {today_time}
 """
         
         await update.message.reply_text(msg, parse_mode='Markdown')
         
     except Exception as e:
         logger.error(f"New players stats error: {e}")
-        await update.message.reply_text("❌ Error loading stats!", reply_markup=admin_menu)
+        await update.message.reply_text("❌ Error loading stats! Please try again.", reply_markup=admin_menu)
 
 # ==========================================
 # ⭐ SUPER ADMIN - VIP CANCEL
@@ -2212,16 +2213,13 @@ async def cancel_vip(update, context):
             await update.message.reply_text(f"❌ User `{target_uid}` is not a VIP member!", parse_mode='Markdown')
             return
         
-        # ✅ Get user info before removing
         user_info = vip[target_uid]
         expiry = user_info.get('expiry', 'N/A')
         key = user_info.get('key', 'N/A')
         
-        # ✅ Remove VIP
         del vip[target_uid]
         await safe_save_json("vip.json", vip)
         
-        # ✅ Log the action
         logger.info(f"✅ Super Admin {uid} cancelled VIP for user {target_uid}")
         
         await update.message.reply_text(
@@ -2239,7 +2237,6 @@ async def cancel_vip(update, context):
 """
         )
         
-        # ✅ Notify the user
         try:
             await context.bot.send_message(
                 chat_id=int(target_uid),
@@ -2262,6 +2259,150 @@ async def cancel_vip(update, context):
     except Exception as e:
         logger.error(f"Cancel VIP error: {e}")
         await update.message.reply_text("❌ Error cancelling VIP! Please check the user ID and try again.")
+
+# ==========================================
+# ⭐ DEVICE TRACKING - FIXED
+# ==========================================
+
+async def device_tracking(update, context):
+    try:
+        uid = int(update.effective_user.id)
+        
+        if uid not in ADMIN_IDS and uid not in SUPER_ADMIN_IDS:
+            await update.message.reply_text("❌ Access Denied! Admin only.")
+            return
+        
+        users = safe_load_json("users.json")
+        
+        total_users = len(users)
+        
+        devices = {}
+        for user_id, user_data in users.items():
+            device_id = user_data.get('device_id', '')
+            if device_id:
+                if device_id not in devices:
+                    devices[device_id] = []
+                devices[device_id].append({
+                    'username': user_data.get('username', 'Unknown'),
+                    'user_id': user_id,
+                    'is_fake': user_data.get('is_fake', False)
+                })
+        
+        unique_devices = len(devices)
+        
+        msg = f"""
+🛡️ *DEVICE TRACKING PANEL*
+━━━━━━━━━━━━━━━━━━━━━━
+
+📊 *STATISTICS*
+├─ 👥 Total Users    :: {total_users}
+├─ 📱 Unique Devices :: {unique_devices}
+└─ 🔒 Multi-Device   :: {total_users - unique_devices}
+
+━━━━━━━━━━━━━━━━━━━━━━
+📋 *RECENT USERS*
+"""
+        count = 0
+        for user_id, user_data in list(users.items())[-10:]:
+            username = user_data.get('username', 'Unknown')
+            device_id = user_data.get('device_id', 'N/A')[:8]
+            ip = user_data.get('ip_address', 'N/A')
+            is_fake = user_data.get('is_fake', False)
+            fake_tag = " (FAKE)" if is_fake else ""
+            
+            msg += f"""
+👤 @{username} (ID: {user_id}){fake_tag}
+├─ 📱 {device_id}...
+└─ 🌐 {ip}
+━━━━━━━━━━━━━━━━━━━━━━
+"""
+            count += 1
+            if count >= 10:
+                break
+        
+        if count == 0:
+            msg += "📭 No users found.\n"
+        
+        msg += f"""
+━━━━━━━━━━━━━━━━━━━━━━
+👑 *Admin:* @{update.effective_user.username}
+🕐 *Last 10 users shown*
+"""
+        
+        inline_keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("📊 All Users", callback_data="track_all")],
+            [InlineKeyboardButton("📱 Unique Devices", callback_data="track_devices")]
+        ])
+        
+        await update.message.reply_text(msg, parse_mode='Markdown', reply_markup=inline_keyboard)
+        
+    except Exception as e:
+        logger.error(f"Device tracking error: {e}")
+        await update.message.reply_text("❌ Error loading device tracking!", reply_markup=admin_menu)
+
+async def device_tracking_callback(update, context):
+    try:
+        query = update.callback_query
+        await query.answer()
+        
+        uid = int(query.from_user.id)
+        if uid not in ADMIN_IDS and uid not in SUPER_ADMIN_IDS:
+            await query.edit_message_text("❌ Access Denied! Admin only.")
+            return
+        
+        data = query.data
+        users = safe_load_json("users.json")
+        
+        if data == "track_all":
+            msg = f"""
+📊 *ALL USERS ({len(users)})*
+━━━━━━━━━━━━━━━━━━━━━━
+"""
+            count = 0
+            for user_id, user_data in list(users.items())[-20:]:
+                username = user_data.get('username', 'Unknown')
+                device = user_data.get('device_id', 'N/A')[:8]
+                is_fake = user_data.get('is_fake', False)
+                fake_tag = " (FAKE)" if is_fake else ""
+                msg += f"👤 @{username} (ID: {user_id}){fake_tag} | 📱{device}...\n"
+                count += 1
+                if count >= 20:
+                    break
+            await query.edit_message_text(msg, parse_mode='Markdown')
+            
+        elif data == "track_devices":
+            devices = {}
+            for user_id, user_data in users.items():
+                device_id = user_data.get('device_id', '')
+                if device_id:
+                    if device_id not in devices:
+                        devices[device_id] = []
+                    devices[device_id].append({
+                        'username': user_data.get('username', 'Unknown'),
+                        'user_id': user_id,
+                        'is_fake': user_data.get('is_fake', False)
+                    })
+            
+            msg = f"""
+📱 *UNIQUE DEVICES ({len(devices)})*
+━━━━━━━━━━━━━━━━━━━━━━
+"""
+            for device_id, users_list in list(devices.items())[:20]:
+                msg += f"📱 {device_id[:8]}... -> {len(users_list)} users\n"
+                for u in users_list[:3]:
+                    fake_tag = " (FAKE)" if u['is_fake'] else ""
+                    msg += f"   👤 @{u['username']} (ID: {u['user_id']}){fake_tag}\n"
+                if len(users_list) > 3:
+                    msg += f"   ... and {len(users_list)-3} more\n"
+                msg += "━━━━━━━━━━━━━━━━━━━━━━\n"
+            
+            await query.edit_message_text(msg, parse_mode='Markdown')
+        else:
+            await query.edit_message_text("❌ Invalid option!", reply_markup=admin_menu)
+            
+    except Exception as e:
+        logger.error(f"Device tracking callback error: {e}")
+        await query.edit_message_text("❌ Error loading device tracking!", reply_markup=admin_menu)
 
 async def start(update, context):
     try:
@@ -2429,6 +2570,10 @@ async def handle_photo(update, context):
         logger.error(f"Handle photo error: {e}")
         await update.message.reply_text("❌ Error uploading! Please try again.", reply_markup=main_menu)
 
+# ==========================================
+# ⭐ CALLBACK HANDLER - FIXED
+# ==========================================
+
 async def callback(update, context):
     try:
         query = update.callback_query
@@ -2460,6 +2605,10 @@ async def callback(update, context):
             await profile_history_callback(update, context)
         elif data == "back_home":
             await back_home_callback(update, context)
+        elif data == "track_all":
+            await device_tracking_callback(update, context)
+        elif data == "track_devices":
+            await device_tracking_callback(update, context)
             
     except Exception as e:
         logger.error(f"Callback error: {e}")
@@ -2793,8 +2942,7 @@ async def leaderboard(update, context):
    📊 {total} Plays • Level {level} {arrow}
 """
             
-            # ✅ DYNAMIC ACHIEVEMENT SHOWING LOGIC (FIXED)
-            # Priority 1: Selected Achievement
+            # ✅ DYNAMIC ACHIEVEMENT SHOWING LOGIC
             if has_saved_selection and selected and selected in unlocked:
                 rarity = ACHIEVEMENTS.get(selected, {}).get('rarity', 'common')
                 emoji = get_rarity_emoji(rarity)
@@ -2803,17 +2951,15 @@ async def leaderboard(update, context):
    🏅 {selected} {emoji}
 """
             else:
-                # Priority 2: Rare Achievements (very_rare, ultra_rare, legendary, mythic)
                 rare = get_rare_achievements(unlocked)
                 
-                # ✅ Top 1 = 4, Top 2 = 3, Top 3 = 2, Rest = 1
-                if i == 0:  # Top 1
+                if i == 0:
                     show_count = 4
-                elif i == 1:  # Top 2
+                elif i == 1:
                     show_count = 3
-                elif i == 2:  # Top 3
+                elif i == 2:
                     show_count = 2
-                else:  # 4-10
+                else:
                     show_count = 1
                 
                 if rare:
@@ -2826,7 +2972,6 @@ async def leaderboard(update, context):
                             emoji = get_rarity_emoji(rarity)
                             msg += f"   🏅 {ach_name} {emoji}\n"
                 else:
-                    # ✅ If no rare, show any unlocked achievement
                     if unlocked:
                         random_ach = random.choice(unlocked)
                         rarity = ACHIEVEMENTS.get(random_ach, {}).get('rarity', 'common')
@@ -2842,7 +2987,6 @@ async def leaderboard(update, context):
 ━━━━━━━━━━━━━━━━━━━━━━
 """
         
-        # ✅ YOUR RANK
         if uid in users:
             user_data = users[uid]
             total_plays = user_data.get('win_count', 0) + user_data.get('loss_count', 0)
@@ -2867,7 +3011,6 @@ async def leaderboard(update, context):
 📊 {total_plays} Plays • Level {level} {arrow}
 """
             
-            # ✅ YOUR RANK ACHIEVEMENT
             unlocked = user_data.get('achievements', {}).get('unlocked', [])
             selected_ach = user_data.get('selected_achievement', None)
             has_saved = user_data.get('selected_achievement_saved', False)
@@ -3909,144 +4052,6 @@ async def rank_command(update, context):
     except Exception as e:
         logger.error(f"Rank command error: {e}")
         await update.message.reply_text("❌ Error loading rank!", reply_markup=main_menu)
-
-async def device_tracking(update, context):
-    try:
-        uid = int(update.effective_user.id)
-        
-        if uid not in ADMIN_IDS and uid not in SUPER_ADMIN_IDS:
-            await update.message.reply_text("❌ Access Denied! Admin only.")
-            return
-        
-        users = safe_load_json("users.json")
-        
-        total_users = len(users)
-        
-        devices = {}
-        for user_id, user_data in users.items():
-            device_id = user_data.get('device_id', '')
-            if device_id:
-                if device_id not in devices:
-                    devices[device_id] = []
-                devices[device_id].append({
-                    'username': user_data.get('username', 'Unknown'),
-                    'user_id': user_id,
-                    'is_fake': user_data.get('is_fake', False)
-                })
-        
-        unique_devices = len(devices)
-        
-        msg = f"""
-🛡️ *DEVICE TRACKING PANEL*
-━━━━━━━━━━━━━━━━━━━━━━
-
-📊 *STATISTICS*
-├─ 👥 Total Users    :: {total_users}
-├─ 📱 Unique Devices :: {unique_devices}
-└─ 🔒 Multi-Device   :: {total_users - unique_devices}
-
-━━━━━━━━━━━━━━━━━━━━━━
-📋 *RECENT USERS*
-"""
-        count = 0
-        for user_id, user_data in list(users.items())[-10:]:
-            username = user_data.get('username', 'Unknown')
-            device_id = user_data.get('device_id', 'N/A')[:8]
-            ip = user_data.get('ip_address', 'N/A')
-            is_fake = user_data.get('is_fake', False)
-            fake_tag = " (FAKE)" if is_fake else ""
-            
-            msg += f"""
-👤 @{username} (ID: {user_id}){fake_tag}
-├─ 📱 {device_id}...
-└─ 🌐 {ip}
-━━━━━━━━━━━━━━━━━━━━━━
-"""
-            count += 1
-            if count >= 10:
-                break
-        
-        if count == 0:
-            msg += "📭 No users found.\n"
-        
-        msg += f"""
-━━━━━━━━━━━━━━━━━━━━━━
-👑 *Admin:* @{update.effective_user.username}
-🕐 *Last 10 users shown*
-"""
-        
-        inline_keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("📊 All Users", callback_data="track_all")],
-            [InlineKeyboardButton("📱 Unique Devices", callback_data="track_devices")]
-        ])
-        
-        await update.message.reply_text(msg, parse_mode='Markdown', reply_markup=inline_keyboard)
-        
-    except Exception as e:
-        logger.error(f"Device tracking error: {e}")
-        await update.message.reply_text("❌ Error loading device tracking!", reply_markup=admin_menu)
-
-async def device_tracking_callback(update, context):
-    try:
-        query = update.callback_query
-        await query.answer()
-        
-        uid = int(query.from_user.id)
-        if uid not in ADMIN_IDS and uid not in SUPER_ADMIN_IDS:
-            await query.edit_message_text("❌ Access Denied! Admin only.")
-            return
-        
-        data = query.data
-        users = safe_load_json("users.json")
-        
-        if data == "track_all":
-            msg = f"""
-📊 *ALL USERS ({len(users)})*
-━━━━━━━━━━━━━━━━━━━━━━
-"""
-            count = 0
-            for user_id, user_data in list(users.items())[-20:]:
-                username = user_data.get('username', 'Unknown')
-                device = user_data.get('device_id', 'N/A')[:8]
-                is_fake = user_data.get('is_fake', False)
-                fake_tag = " (FAKE)" if is_fake else ""
-                msg += f"👤 @{username} (ID: {user_id}){fake_tag} | 📱{device}...\n"
-                count += 1
-                if count >= 20:
-                    break
-            await query.edit_message_text(msg, parse_mode='Markdown')
-            
-        elif data == "track_devices":
-            devices = {}
-            for user_id, user_data in users.items():
-                device_id = user_data.get('device_id', '')
-                if device_id:
-                    if device_id not in devices:
-                        devices[device_id] = []
-                    devices[device_id].append({
-                        'username': user_data.get('username', 'Unknown'),
-                        'user_id': user_id,
-                        'is_fake': user_data.get('is_fake', False)
-                    })
-            
-            msg = f"""
-📱 *UNIQUE DEVICES ({len(devices)})*
-━━━━━━━━━━━━━━━━━━━━━━
-"""
-            for device_id, users_list in list(devices.items())[:20]:
-                msg += f"📱 {device_id[:8]}... -> {len(users_list)} users\n"
-                for u in users_list[:3]:
-                    fake_tag = " (FAKE)" if u['is_fake'] else ""
-                    msg += f"   👤 @{u['username']} (ID: {u['user_id']}){fake_tag}\n"
-                if len(users_list) > 3:
-                    msg += f"   ... and {len(users_list)-3} more\n"
-                msg += "━━━━━━━━━━━━━━━━━━━━━━\n"
-            
-            await query.edit_message_text(msg, parse_mode='Markdown')
-            
-    except Exception as e:
-        logger.error(f"Device tracking callback error: {e}")
-        await query.edit_message_text("❌ Error!", reply_markup=admin_menu)
 
 async def track_user(update, context):
     try:
@@ -5624,6 +5629,8 @@ def main():
     print("✅ VIP EXPIRE PAR DATA DELETE NAHI HOTA")
     print("✅ BOT RESTART PAR DATA SAFE RAHEGA")
     print("✅ 15-20 PLAYERS EK SAATH FAST")
+    print("✅ DEVICE TRACKING FIXED")
+    print("✅ NEW PLAYERS STATS FIXED")
     print("✅ ALL ERRORS FIXED")
     print("=" * 50)
     app.run_polling()
