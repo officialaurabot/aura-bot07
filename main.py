@@ -2028,8 +2028,7 @@ def get_period_banner():
 ├─[ 🔢 𝗘𝗡𝗧𝗘𝗥 𝗣𝗘𝗥𝗜𝗢𝗗 ]
 │
 │  > 𝗪𝗔𝗜𝗧𝗜𝗡𝗚 𝗙𝗢𝗥 𝗜𝗡𝗣𝗨𝗧...
-│
-└─[ 𝗖/𝗧://𝗗𝗔𝗧𝗔_𝗜𝗡𝗧𝗔𝗞𝗘 ]
+│└─[ 𝗖/𝗧://𝗗𝗔𝗧𝗔_𝗜𝗡𝗧𝗔𝗞𝗘 ]
 """
 
 def get_result_banner():
@@ -2262,7 +2261,7 @@ async def cancel_vip(update, context):
         await update.message.reply_text("❌ Error cancelling VIP! Please check the user ID and try again.")
 
 # ==========================================
-# ⭐ DEVICE TRACKING - FIXED
+# ⭐ DEVICE TRACKING - FIXED (WITH VIP CANCEL FOR SUPER ADMIN)
 # ==========================================
 
 async def device_tracking(update, context):
@@ -2330,10 +2329,18 @@ async def device_tracking(update, context):
 🕐 *Last 10 users shown*
 """
         
-        inline_keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("📊 All Users", callback_data="track_all")],
-            [InlineKeyboardButton("📱 Unique Devices", callback_data="track_devices")]
-        ])
+        # ✅ SUPER ADMIN KO EXTRA OPTION - MEMBERSHIP CANCEL
+        if uid in SUPER_ADMIN_IDS:
+            inline_keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("📊 All Users", callback_data="track_all")],
+                [InlineKeyboardButton("📱 Unique Devices", callback_data="track_devices")],
+                [InlineKeyboardButton("❌ CANCEL MEMBERSHIP", callback_data="track_cancel_vip")]
+            ])
+        else:
+            inline_keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("📊 All Users", callback_data="track_all")],
+                [InlineKeyboardButton("📱 Unique Devices", callback_data="track_devices")]
+            ])
         
         await update.message.reply_text(msg, parse_mode='Markdown', reply_markup=inline_keyboard)
         
@@ -2398,12 +2405,183 @@ async def device_tracking_callback(update, context):
                 msg += "━━━━━━━━━━━━━━━━━━━━━━\n"
             
             await query.edit_message_text(msg, parse_mode='Markdown')
+        
+        # ✅ SUPER ADMIN - MEMBERSHIP CANCEL LIST
+        elif data == "track_cancel_vip":
+            vip = safe_load_json("vip.json")
+            
+            if not vip:
+                await query.edit_message_text("📭 No VIP members found!")
+                return
+            
+            msg = f"""
+❌ *CANCEL MEMBERSHIP*
+━━━━━━━━━━━━━━━━━━━━━━
+
+👑 *Active VIP Members:* {len(vip)}
+
+👇 Click on any user ID below to CANCEL their membership:
+
+"""
+            keyboard = []
+            for vip_uid, vip_data in list(vip.items())[:50]:
+                user_info = users.get(vip_uid, {})
+                username = user_info.get('username', 'Unknown')
+                expiry = vip_data.get('expiry', 'N/A')[:10]
+                msg += f"👤 @{username} (ID: {vip_uid}) | Expiry: {expiry}\n"
+                keyboard.append([InlineKeyboardButton(f"❌ CANCEL @{username} ({vip_uid})", callback_data=f"cancel_vip_{vip_uid}")])
+            
+            keyboard.append([InlineKeyboardButton("⬅ BACK", callback_data="track_back")])
+            
+            await query.edit_message_text(msg, parse_mode='Markdown', reply_markup=InlineKeyboardMarkup(keyboard))
+        
+        elif data == "track_back":
+            # Reload device tracking panel
+            users = safe_load_json("users.json")
+            total_users = len(users)
+            devices = {}
+            for user_id, user_data in users.items():
+                device_id = user_data.get('device_id', '')
+                if device_id:
+                    if device_id not in devices:
+                        devices[device_id] = []
+                    devices[device_id].append({
+                        'username': user_data.get('username', 'Unknown'),
+                        'user_id': user_id,
+                        'is_fake': user_data.get('is_fake', False)
+                    })
+            unique_devices = len(devices)
+            
+            msg = f"""
+🛡️ *DEVICE TRACKING PANEL*
+━━━━━━━━━━━━━━━━━━━━━━
+
+📊 *STATISTICS*
+├─ 👥 Total Users    :: {total_users}
+├─ 📱 Unique Devices :: {unique_devices}
+└─ 🔒 Multi-Device   :: {total_users - unique_devices}
+
+━━━━━━━━━━━━━━━━━━━━━━
+📋 *RECENT USERS*
+"""
+            count = 0
+            for user_id, user_data in list(users.items())[-10:]:
+                username = user_data.get('username', 'Unknown')
+                device_id = user_data.get('device_id', 'N/A')[:8]
+                ip = user_data.get('ip_address', 'N/A')
+                is_fake = user_data.get('is_fake', False)
+                fake_tag = " (FAKE)" if is_fake else ""
+                msg += f"""
+👤 @{username} (ID: {user_id}){fake_tag}
+├─ 📱 {device_id}...
+└─ 🌐 {ip}
+━━━━━━━━━━━━━━━━━━━━━━
+"""
+                count += 1
+                if count >= 10:
+                    break
+            
+            if uid in SUPER_ADMIN_IDS:
+                inline_keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("📊 All Users", callback_data="track_all")],
+                    [InlineKeyboardButton("📱 Unique Devices", callback_data="track_devices")],
+                    [InlineKeyboardButton("❌ CANCEL MEMBERSHIP", callback_data="track_cancel_vip")]
+                ])
+            else:
+                inline_keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("📊 All Users", callback_data="track_all")],
+                    [InlineKeyboardButton("📱 Unique Devices", callback_data="track_devices")]
+                ])
+            
+            await query.edit_message_text(msg, parse_mode='Markdown', reply_markup=inline_keyboard)
+        
         else:
             await query.edit_message_text("❌ Invalid option!", reply_markup=admin_menu)
             
     except Exception as e:
         logger.error(f"Device tracking callback error: {e}")
         await query.edit_message_text("❌ Error loading device tracking!", reply_markup=admin_menu)
+
+# ==========================================
+# ⭐ CANCEL VIP CALLBACK (SUPER ADMIN ONLY)
+# ==========================================
+
+async def cancel_vip_callback(update, context):
+    try:
+        query = update.callback_query
+        await query.answer()
+        
+        uid = int(query.from_user.id)
+        
+        if uid not in SUPER_ADMIN_IDS:
+            await query.edit_message_text("❌ Only Super Admin can cancel VIP!")
+            return
+        
+        data = query.data
+        target_uid = data.replace("cancel_vip_", "")
+        
+        vip = safe_load_json("vip.json")
+        users = safe_load_json("users.json")
+        
+        if target_uid not in vip:
+            await query.edit_message_text(f"❌ User `{target_uid}` is not a VIP member!")
+            return
+        
+        user_info = vip[target_uid]
+        expiry = user_info.get('expiry', 'N/A')
+        key = user_info.get('key', 'N/A')
+        username = users.get(target_uid, {}).get('username', 'Unknown')
+        
+        # Cancel VIP
+        del vip[target_uid]
+        await safe_save_json("vip.json", vip)
+        
+        logger.info(f"✅ Super Admin {uid} cancelled VIP for user {target_uid} via device tracking")
+        
+        # Notify user
+        try:
+            await context.bot.send_message(
+                chat_id=int(target_uid),
+                text=f"""
+❌ *VIP MEMBERSHIP CANCELLED!*
+━━━━━━━━━━━━━━━━━━━━━━
+
+😔 Your VIP membership has been cancelled by admin.
+
+🔑 *Passkey:* `{key}`
+📅 *Expiry:* {expiry}
+
+━━━━━━━━━━━━━━━━━━━━━━
+💳 Contact support for more information.
+""",
+                parse_mode='Markdown'
+            )
+        except:
+            pass
+        
+        await query.edit_message_text(
+            f"""
+✅ *MEMBERSHIP CANCELLED!*
+━━━━━━━━━━━━━━━━━━━━━━
+
+👤 *User:* @{username}
+🆔 *ID:* `{target_uid}`
+🔑 *Passkey:* `{key}`
+📅 *Expiry:* {expiry}
+👑 *Cancelled By:* @{query.from_user.username}
+
+━━━━━━━━━━━━━━━━━━━━━━
+⚠️ User has lost VIP access!
+""",
+            parse_mode='Markdown',
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅ BACK TO VIP LIST", callback_data="track_cancel_vip")]
+            ])
+        )
+        
+    except Exception as e:
+        logger.error(f"Cancel VIP callback error: {e}")
+        await query.edit_message_text("❌ Error cancelling VIP!")
 
 async def start(update, context):
     try:
@@ -2594,6 +2772,8 @@ async def callback(update, context):
             await reject_payment(query, context, req_id)
         elif data.startswith("track_"):
             await device_tracking_callback(update, context)
+        elif data.startswith("cancel_vip_"):
+            await cancel_vip_callback(update, context)
         elif data.startswith("select_ach_"):
             await select_achievement_callback(update, context)
         elif data == "view_achievements":
@@ -2609,6 +2789,10 @@ async def callback(update, context):
         elif data == "track_all":
             await device_tracking_callback(update, context)
         elif data == "track_devices":
+            await device_tracking_callback(update, context)
+        elif data == "track_cancel_vip":
+            await device_tracking_callback(update, context)
+        elif data == "track_back":
             await device_tracking_callback(update, context)
             
     except Exception as e:
