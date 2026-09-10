@@ -50,6 +50,76 @@ BROADCAST_HISTORY = []
 FEEDBACK_LIST = []
 
 # ==========================================
+# ⭐ ALGORITHM HISTORY (STUDY SYSTEM)
+# ==========================================
+ALGORITHM_HISTORY = [
+    {
+        "version": "v1.0",
+        "name": "Basic BIG/SMALL Random",
+        "description": "Initial random number generation without any pattern analysis",
+        "added_by": "System",
+        "date": "2026-08-01",
+        "status": "deprecated"
+    },
+    {
+        "version": "v2.0",
+        "name": "Historical Frequency Analysis",
+        "description": "Numbers ka historical data analyze karke next prediction nikalna",
+        "added_by": "System",
+        "date": "2026-08-05",
+        "status": "deprecated"
+    },
+    {
+        "version": "v3.0",
+        "name": "Chain Pattern Algorithm",
+        "description": "Sequence patterns detect karna (removed in v9.0)",
+        "added_by": "System",
+        "date": "2026-08-10",
+        "status": "removed"
+    },
+    {
+        "version": "v4.0",
+        "name": "Self-Learning BIG/SMALL Analysis",
+        "description": "Historical 200+ results se self-learning algorithm jo har naye result ke saath update hota hai",
+        "added_by": "System",
+        "date": "2026-08-15",
+        "status": "active"
+    },
+    {
+        "version": "v5.0",
+        "name": "3-Press Opposite Rule",
+        "description": "Agar user 3 baar same choice kare toh opposite result generate karna",
+        "added_by": "System",
+        "date": "2026-08-20",
+        "status": "active"
+    },
+    {
+        "version": "v6.0",
+        "name": "Global Period Results Lock",
+        "description": "Har period ka result ek baar generate hone ke baad lock ho jata hai, sab players ko same result milega",
+        "added_by": "System",
+        "date": "2026-08-25",
+        "status": "active"
+    },
+    {
+        "version": "v7.0",
+        "name": "Wins-Based Level System",
+        "description": "Total wins ke hisaab se level update (har 5 wins = 1 level)",
+        "added_by": "System",
+        "date": "2026-09-10",
+        "status": "active"
+    },
+    {
+        "version": "v8.0",
+        "name": "Dynamic Rare Achievement Display",
+        "description": "Har player ke rare achievements leaderboard par show karna (fake + real)",
+        "added_by": "System",
+        "date": "2026-09-10",
+        "status": "active"
+    }
+]
+
+# ==========================================
 # GLOBAL RESULT STORAGE
 # ==========================================
 GLOBAL_PERIOD_RESULTS = {}
@@ -1954,6 +2024,7 @@ super_admin_menu = ReplyKeyboardMarkup([
     ["📋 APPROVAL LOG", "👑 ADMIN ACTIVITY"],
     ["📝 FEEDBACK LOG", "🛡️ DEVICE TRACKING"],
     ["📊 NEW PLAYERS"],
+    ["🔬 STUDY"],
     ["🔙 BACK"]
 ], resize_keyboard=True)
 
@@ -2099,6 +2170,241 @@ def get_stats_banner_with_level(win, loss, level, period, category, num1, num2, 
 └─[ 𝗖/𝗧://𝗟𝗜𝗩𝗘 ]
 """
     return banner
+
+# ==========================================
+# ⭐ STUDY SYSTEM (SUPER ADMIN ONLY)
+# ==========================================
+
+async def study_panel(update, context):
+    """Study panel - shows all algorithms added by AI bot"""
+    try:
+        uid = int(update.effective_user.id)
+        
+        if uid not in SUPER_ADMIN_IDS:
+            await update.message.reply_text("❌ Only Super Admin can access STUDY!")
+            return
+        
+        # Count active/deprecated algorithms
+        active_count = sum(1 for algo in ALGORITHM_HISTORY if algo['status'] == 'active')
+        deprecated_count = sum(1 for algo in ALGORITHM_HISTORY if algo['status'] == 'deprecated')
+        removed_count = sum(1 for algo in ALGORITHM_HISTORY if algo['status'] == 'removed')
+        total_count = len(ALGORITHM_HISTORY)
+        
+        msg = f"""
+🔬 *STUDY PANEL - ALGORITHM ANALYSIS*
+━━━━━━━━━━━━━━━━━━━━━━
+
+📊 *ALGORITHM STATISTICS*
+├─ 🟢 Active: {active_count}
+├─ 🟡 Deprecated: {deprecated_count}
+├─ 🔴 Removed: {removed_count}
+└─ 📚 Total: {total_count}
+
+━━━━━━━━━━━━━━━━━━━━━━
+🧠 *AI BOT ALGORITHM HISTORY*
+━━━━━━━━━━━━━━━━━━━━━━
+"""
+        
+        for algo in ALGORITHM_HISTORY:
+            if algo['status'] == 'active':
+                status_emoji = "🟢"
+                status_text = "ACTIVE"
+            elif algo['status'] == 'deprecated':
+                status_emoji = "🟡"
+                status_text = "DEPRECATED"
+            else:
+                status_emoji = "🔴"
+                status_text = "REMOVED"
+            
+            msg += f"""
+{status_emoji} *{algo['version']} - {algo['name']}*
+├─ 📝 {algo['description']}
+├─ 👤 Added By: {algo['added_by']}
+├─ 📅 Date: {algo['date']}
+└─ 📊 Status: {status_text}
+━━━━━━━━━━━━━━━━━━━━━━
+"""
+        
+        msg += f"""
+📌 *CURRENT ACTIVE ALGORITHMS:* {active_count}
+📌 *LAST UPDATED:* {ALGORITHM_HISTORY[-1]['date'] if ALGORITHM_HISTORY else 'N/A'}
+
+━━━━━━━━━━━━━━━━━━━━━━
+👑 *Super Admin:* @{update.effective_user.username}
+🕐 *Report Time:* {datetime.now().strftime('%I:%M %p')}
+"""
+        
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("📊 DETAILED VIEW", callback_data="study_detailed")],
+            [InlineKeyboardButton("🆕 NEW ALGORITHM", callback_data="study_new")],
+            [InlineKeyboardButton("🔄 REFRESH", callback_data="study_refresh")]
+        ])
+        
+        await update.message.reply_text(msg, parse_mode='Markdown', reply_markup=keyboard)
+        
+    except Exception as e:
+        logger.error(f"Study panel error: {e}")
+        await update.message.reply_text("❌ Error loading study panel!", reply_markup=super_admin_menu)
+
+async def study_callback(update, context):
+    """Handle study callbacks"""
+    try:
+        query = update.callback_query
+        await query.answer()
+        
+        uid = int(query.from_user.id)
+        
+        if uid not in SUPER_ADMIN_IDS:
+            await query.edit_message_text("❌ Only Super Admin can access STUDY!")
+            return
+        
+        data = query.data
+        
+        if data == "study_detailed":
+            # Detailed view of current active algorithm
+            active_algos = [algo for algo in ALGORITHM_HISTORY if algo['status'] == 'active']
+            
+            msg = f"""
+📊 *DETAILED ALGORITHM VIEW*
+━━━━━━━━━━━━━━━━━━━━━━
+
+🟢 *CURRENTLY ACTIVE ALGORITHMS:* {len(active_algos)}
+
+"""
+            for algo in active_algos:
+                msg += f"""
+🔹 *{algo['version']} - {algo['name']}*
+📝 {algo['description']}
+📅 Added: {algo['date']}
+👤 By: {algo['added_by']}
+━━━━━━━━━━━━━━━━━━━━━━
+"""
+            
+            msg += f"""
+🧪 *TECHNICAL DETAILS:*
+├─ 📊 Self-Learning: ✅ Enabled
+├─ 🔄 Pattern Recognition: ✅ Active
+├─ 📈 Historical Data: 200+ results
+├─ 🎯 Confidence Scoring: ✅ Active
+├─ 🔒 Period Lock: ✅ Active
+├─ ⚡ 3-Press Rule: ✅ Active
+├─ 📈 Wins-Based Level: ✅ Active
+└─ 🏅 Rare Achievement Display: ✅ Active
+
+━━━━━━━━━━━━━━━━━━━━━━
+💡 *Algorithm Version:* v8.0
+🕐 *Last Updated:* {datetime.now().strftime('%Y-%m-%d %H:%M')}
+"""
+            
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅ BACK TO STUDY", callback_data="study_back")]
+            ])
+            
+            await query.edit_message_text(msg, parse_mode='Markdown', reply_markup=keyboard)
+        
+        elif data == "study_new":
+            msg = f"""
+🆕 *NEW ALGORITHM UPDATES*
+━━━━━━━━━━━━━━━━━━━━━━
+
+📌 *Latest Algorithm Added:*
+🔹 *v8.0 - Dynamic Rare Achievement Display*
+
+📝 *Description:*
+Har player ke rare achievements leaderboard par show karna (fake + real dono)
+
+━━━━━━━━━━━━━━━━━━━━━━
+📊 *PREVIOUS VERSIONS:*
+"""
+            for algo in ALGORITHM_HISTORY[-5:]:
+                if algo['status'] == 'active':
+                    status = "🟢"
+                elif algo['status'] == 'deprecated':
+                    status = "🟡"
+                else:
+                    status = "🔴"
+                msg += f"\n{status} {algo['version']} - {algo['name']}"
+            
+            msg += f"""
+━━━━━━━━━━━━━━━━━━━━━━
+💡 *Total Algorithms:* {len(ALGORITHM_HISTORY)}
+🕐 *Last Added:* {ALGORITHM_HISTORY[-1]['date'] if ALGORITHM_HISTORY else 'N/A'}
+"""
+            
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅ BACK TO STUDY", callback_data="study_back")]
+            ])
+            
+            await query.edit_message_text(msg, parse_mode='Markdown', reply_markup=keyboard)
+        
+        elif data == "study_refresh":
+            await query.answer("🔄 Refreshed!", show_alert=False)
+            await study_panel(update, context)
+        
+        elif data == "study_back":
+            # Rebuild study panel
+            active_count = sum(1 for algo in ALGORITHM_HISTORY if algo['status'] == 'active')
+            deprecated_count = sum(1 for algo in ALGORITHM_HISTORY if algo['status'] == 'deprecated')
+            removed_count = sum(1 for algo in ALGORITHM_HISTORY if algo['status'] == 'removed')
+            total_count = len(ALGORITHM_HISTORY)
+            
+            msg = f"""
+🔬 *STUDY PANEL - ALGORITHM ANALYSIS*
+━━━━━━━━━━━━━━━━━━━━━━
+
+📊 *ALGORITHM STATISTICS*
+├─ 🟢 Active: {active_count}
+├─ 🟡 Deprecated: {deprecated_count}
+├─ 🔴 Removed: {removed_count}
+└─ 📚 Total: {total_count}
+
+━━━━━━━━━━━━━━━━━━━━━━
+🧠 *AI BOT ALGORITHM HISTORY*
+━━━━━━━━━━━━━━━━━━━━━━
+"""
+            for algo in ALGORITHM_HISTORY:
+                if algo['status'] == 'active':
+                    status_emoji = "🟢"
+                    status_text = "ACTIVE"
+                elif algo['status'] == 'deprecated':
+                    status_emoji = "🟡"
+                    status_text = "DEPRECATED"
+                else:
+                    status_emoji = "🔴"
+                    status_text = "REMOVED"
+                
+                msg += f"""
+{status_emoji} *{algo['version']} - {algo['name']}*
+├─ 📝 {algo['description']}
+├─ 👤 Added By: {algo['added_by']}
+├─ 📅 Date: {algo['date']}
+└─ 📊 Status: {status_text}
+━━━━━━━━━━━━━━━━━━━━━━
+"""
+            
+            msg += f"""
+📌 *CURRENT ACTIVE ALGORITHMS:* {active_count}
+📌 *LAST UPDATED:* {ALGORITHM_HISTORY[-1]['date'] if ALGORITHM_HISTORY else 'N/A'}
+
+━━━━━━━━━━━━━━━━━━━━━━
+👑 *Super Admin:* @{query.from_user.username}
+🕐 *Report Time:* {datetime.now().strftime('%I:%M %p')}
+"""
+            
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("📊 DETAILED VIEW", callback_data="study_detailed")],
+                [InlineKeyboardButton("🆕 NEW ALGORITHM", callback_data="study_new")],
+                [InlineKeyboardButton("🔄 REFRESH", callback_data="study_refresh")]
+            ])
+            
+            await query.edit_message_text(msg, parse_mode='Markdown', reply_markup=keyboard)
+        
+        else:
+            await query.edit_message_text("❌ Invalid option!", reply_markup=super_admin_menu)
+            
+    except Exception as e:
+        logger.error(f"Study callback error: {e}")
+        await query.edit_message_text("❌ Error loading study panel!")
 
 # ==========================================
 # ⭐ NEW PLAYERS STATS - FIXED
@@ -2778,6 +3084,10 @@ async def callback(update, context):
         
         if data.startswith("broadcast_"):
             await broadcast_callback(update, context)
+            return
+        
+        if data.startswith("study_"):
+            await study_callback(update, context)
             return
         
         if data.startswith("app_"):
@@ -5595,6 +5905,14 @@ async def handle_buttons(update, context):
                 await update.message.reply_text("❌ Admin only!")
             return
         
+        if text == "🔬 STUDY":
+            user_id_int = int(uid)
+            if user_id_int in SUPER_ADMIN_IDS:
+                await study_panel(update, context)
+            else:
+                await update.message.reply_text("❌ Only Super Admin can access STUDY!", reply_markup=admin_menu)
+            return
+        
         if text == "🔮 ALGORITHM":
             await admin_algorithm_view(update, context)
             return
@@ -5769,6 +6087,7 @@ def main():
     app.add_handler(CommandHandler("rank", rank_command))
     app.add_handler(CommandHandler("newplayers", new_players_stats))
     app.add_handler(CommandHandler("cancelvip", cancel_vip))
+    app.add_handler(CommandHandler("study", study_panel))
     app.add_handler(CallbackQueryHandler(callback))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_buttons))
@@ -5846,6 +6165,7 @@ def main():
     print("✅ DEVICE TRACKING FIXED")
     print("✅ NEW PLAYERS STATS FIXED")
     print("✅ LEADERBOARD FIXED")
+    print("✅ STUDY PANEL: ENABLED (Super Admin Only)")
     print("✅ ALL ERRORS FIXED")
     print("=" * 50)
     app.run_polling()
