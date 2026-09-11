@@ -1,5 +1,5 @@
 # ==========================================
-# 🌌 AURA BOT v9.0 - COMPLETE FIXED
+# 🌌 AURA BOT v10.0 - COMPLETE FIXED
 # ==========================================
 
 import logging
@@ -105,10 +105,10 @@ ALGORITHM_HISTORY = [
     {
         "version": "v7.0",
         "name": "Wins-Based Level System",
-        "description": "Total wins ke hisaab se level update (har 5 wins = 1 level) - Profile Level",
+        "description": "Total wins ke hisaab se level update (har 5 wins = 1 level)",
         "added_by": "System",
         "date": "2026-09-10",
-        "status": "active"
+        "status": "deprecated"
     },
     {
         "version": "v8.0",
@@ -129,7 +129,15 @@ ALGORITHM_HISTORY = [
     {
         "version": "v10.0",
         "name": "Game Level vs Profile Level + 30min Fake Players + 2 Achievements Display",
-        "description": "Game play level alag (win=reset, loss=+1), Profile level alag (wins/5). Har 30 min par fake players add. Har player ko 2 achievements show (selected + 1 random ya AI 2 random).",
+        "description": "Game play level alag (win=reset, loss=+1), Profile level alag (wins/5). Har 30 min par fake players add. Har player ko 2 achievements show.",
+        "added_by": "System",
+        "date": "2026-09-11",
+        "status": "deprecated"
+    },
+    {
+        "version": "v11.0",
+        "name": "Single Level System + 30min Fake Players + 2 Achievements",
+        "description": "Game Level hata diya. Sirf ek Level system. Win = Reset to 1, Loss = +1. Har 30 min par fake players add. Har player ko 2 achievements show.",
         "added_by": "System",
         "date": "2026-09-11",
         "status": "active"
@@ -237,28 +245,22 @@ def safe_load_json(filename):
     return {}
 
 # ==========================================
-# ⭐ LEVEL SYSTEM - PROFILE LEVEL (WINS BASED)
+# ⭐ LEVEL SYSTEM - SINGLE LEVEL
 # ==========================================
+# RULE:
+#   Win  → Level = 1 (Reset to 1)
+#   Loss → Level = Level + 1
 
-def calculate_profile_level(wins):
-    """Profile level based on total wins - Har 5 wins par level up"""
-    level = wins // 5
-    return level
-
-# ==========================================
-# ⭐ GAME LEVEL SYSTEM (SESSION BASED)
-# ==========================================
-
-def calculate_game_level(current_game_level, win):
+def calculate_level(current_level, win):
     """
-    Game Play Level - sirf session ka level
-    Win = Reset to 0
-    Loss = +1
+    Level update rule:
+    - Win  → Reset to 1
+    - Loss → +1
     """
     if win:
-        return 0  # Win par reset
+        return 1  # Win par reset to 1
     else:
-        return current_game_level + 1  # Loss par +1
+        return current_level + 1  # Loss par +1
 
 # ==========================================
 # ⭐ DAILY BONUS SYSTEM
@@ -285,13 +287,12 @@ async def daily_bonus(update, context):
         users = safe_load_json("users.json")
         if uid in users:
             users[uid]['win_count'] = users[uid].get('win_count', 0) + bonus
-            users[uid]['level'] = calculate_profile_level(users[uid]['win_count'])
             await safe_save_json("users.json", users)
     
     DAILY_BONUS_TRACKER[uid]['last_claimed'] = today
     
     await update.message.reply_text(
-        f"🎁 *DAILY BONUS CLAIMED!* 🎁\n━━━━━━━━━━━━━━━━━━━━━━\n✅ +{bonus} Free Wins!\n📊 Total Wins: {users[uid]['win_count']}\n📈 Profile Level: {users[uid]['level']}\n━━━━━━━━━━━━━━━━━━━━━━\n🔥 Come back tomorrow for more!",
+        f"🎁 *DAILY BONUS CLAIMED!* 🎁\n━━━━━━━━━━━━━━━━━━━━━━\n✅ +{bonus} Free Wins!\n📊 Total Wins: {users[uid]['win_count']}\n━━━━━━━━━━━━━━━━━━━━━━\n🔥 Come back tomorrow for more!",
         parse_mode='Markdown'
     )
 
@@ -731,8 +732,6 @@ async def weekly_rewards(update, context):
                 msg += "👏 *Good Effort! Keep it up!*"
         else:
             msg += "💪 *Keep playing to reach Top 10!*"
-        if uid in users:
-            users[uid]['level'] = calculate_profile_level(users[uid].get('win_count', 0))
         await safe_save_json("users.json", users)
     
     WEEKLY_REWARDS_TRACKER[uid]['week_claimed'] = week_key
@@ -866,7 +865,6 @@ async def handle_referral(update, context):
                     reward_msg = "🎉 +5 Wins!"
                 else:
                     reward_msg = ""
-                users[referrer]['level'] = calculate_profile_level(users[referrer].get('win_count', 0))
                 await safe_save_json("users.json", users)
             
             try:
@@ -881,7 +879,6 @@ async def handle_referral(update, context):
             async with get_user_lock(uid):
                 users = safe_load_json("users.json")
                 users[uid]['win_count'] = users[uid].get('win_count', 0) + 2
-                users[uid]['level'] = calculate_profile_level(users[uid]['win_count'])
                 await safe_save_json("users.json", users)
             
             await update.message.reply_text(
@@ -1046,9 +1043,6 @@ async def auto_increase_plays():
                     increase = random.randint(1, 5)
                     user_data['win_count'] = user_data.get('win_count', 0) + random.randint(0, increase)
                     user_data['loss_count'] = user_data.get('loss_count', 0) + random.randint(0, increase)
-                    
-                    total = user_data['win_count'] + user_data['loss_count']
-                    user_data['level'] = calculate_profile_level(user_data['win_count'])
             
             await safe_save_json("users.json", users)
             logger.info("✅ Auto-play increase completed!")
@@ -1105,8 +1099,6 @@ async def dynamic_top3_update():
                 
                 user_data['win_count'] = new_wins
                 user_data['loss_count'] = new_losses
-                
-                user_data['level'] = calculate_profile_level(new_wins)
                 user_data['rank_level'] = get_aura_rank(new_total)['level']
                 
                 users[uid] = user_data
@@ -1194,7 +1186,6 @@ async def add_fake_players_every_30min():
                     wins = random.randint(1, 15)
                     losses = random.randint(1, 10)
                     total_plays = wins + losses
-                    level = calculate_profile_level(wins)
                     rank_data = get_aura_rank(total_plays)
                     
                     # Random achievements unlock karo
@@ -1211,10 +1202,6 @@ async def add_fake_players_every_30min():
                         unlocked_achievements.append("🏆 10 Wins")
                     if wins >= 25:
                         unlocked_achievements.append("🏆 25 Wins")
-                    if level >= 5:
-                        unlocked_achievements.append("⭐ Level 5")
-                    if level >= 10:
-                        unlocked_achievements.append("⭐ Level 10")
                     if wins >= 3:
                         unlocked_achievements.append("🔥 3 Streak")
                     if wins >= 5:
@@ -1230,7 +1217,7 @@ async def add_fake_players_every_30min():
                         "joined": str(datetime.now()),
                         "win_count": wins,
                         "loss_count": losses,
-                        "level": level,
+                        "level": 1,  # Default level 1
                         "rank_level": rank_data["level"],
                         "previous_rank": None,
                         "device_id": f"dev_{random.randint(1000,9999)}",
@@ -1305,7 +1292,7 @@ async def add_daily_random_players():
                         "joined": str(datetime.now()),
                         "win_count": fake["win"],
                         "loss_count": fake["loss"],
-                        "level": calculate_profile_level(fake["win"]),
+                        "level": 1,
                         "rank_level": rank_data["level"],
                         "previous_rank": None,
                         "device_id": f"dev_{random.randint(1000,9999)}",
@@ -1382,7 +1369,7 @@ HISTORICAL_RESULTS = [
     1, 8, 4, 9, 0, 5, 0, 8, 0, 1,
     4, 8, 6, 0, 1, 8, 3, 5, 3, 6,
     3, 2, 1, 2, 9, 2, 4, 3, 4, 6,
-    0, 6, 7, 8, 4, 5, 0
+    0, 6
 ]
 
 CLASSIFIED_RESULTS = [
@@ -1697,7 +1684,6 @@ def initialize_fake_users():
             total_plays = fake["win"] + fake["loss"]
             wins = fake["win"]
             losses = fake["loss"]
-            level = calculate_profile_level(wins)
             rank_data = get_aura_rank(total_plays)
             
             unlocked_achievements = []
@@ -1736,23 +1722,6 @@ def initialize_fake_users():
             if wins >= 1000:
                 unlocked_achievements.append("🏆 1000 Wins")
             
-            if level >= 5:
-                unlocked_achievements.append("⭐ Level 5")
-            if level >= 10:
-                unlocked_achievements.append("⭐ Level 10")
-            if level >= 15:
-                unlocked_achievements.append("⭐ Level 15")
-            if level >= 20:
-                unlocked_achievements.append("⭐ Level 20")
-            if level >= 25:
-                unlocked_achievements.append("⭐ Level 25")
-            if level >= 30:
-                unlocked_achievements.append("⭐ Level 30")
-            if level >= 40:
-                unlocked_achievements.append("⭐ Level 40")
-            if level >= 50:
-                unlocked_achievements.append("⭐ Level 50")
-            
             if wins >= 3:
                 unlocked_achievements.append("🔥 3 Streak")
             if wins >= 5:
@@ -1764,36 +1733,6 @@ def initialize_fake_users():
             if wins >= 20:
                 unlocked_achievements.append("🔥 20 Streak")
             
-            if total_plays >= 100000:
-                unlocked_achievements.append("🏆 GOD OF AURA")
-                unlocked_achievements.append("⚡ LIGHTNING")
-            if wins >= 50000:
-                unlocked_achievements.append("💎 AURA MASTER")
-            if wins >= 5000:
-                unlocked_achievements.append("🏆 CHAMPION")
-            if total_plays >= 25000:
-                unlocked_achievements.append("💎 DIAMOND HANDS")
-            
-            if total_plays >= 30:
-                unlocked_achievements.append("🌟 STAR PLAYER")
-            
-            if total_plays >= 30:
-                unlocked_achievements.append("🏆 CHAMPION")
-            if total_plays >= 25:
-                unlocked_achievements.append("🏆 100 Wins")
-            if total_plays >= 20:
-                unlocked_achievements.append("🏆 50 Wins")
-            if total_plays >= 15:
-                unlocked_achievements.append("🎯 100 Games")
-            if total_plays >= 10:
-                unlocked_achievements.append("🎯 50 Games")
-            if total_plays >= 5:
-                unlocked_achievements.append("🎯 25 Games")
-            if total_plays >= 3:
-                unlocked_achievements.append("🏆 10 Wins")
-            if total_plays >= 1:
-                unlocked_achievements.append("🏅 First Win")
-            
             unlocked_achievements = list(set(unlocked_achievements))
             
             fake_id = f"user_{username}"
@@ -1804,7 +1743,7 @@ def initialize_fake_users():
                 "joined": str(datetime.now() - timedelta(days=random.randint(1, 30))),
                 "win_count": wins,
                 "loss_count": losses,
-                "level": level,
+                "level": 1,
                 "rank_level": rank_data["level"],
                 "previous_rank": None,
                 "device_id": f"dev_{random.randint(1000,9999)}",
@@ -1844,7 +1783,6 @@ def get_leaderboard_users():
     for user_id, user_data in users.items():
         is_fake = user_data.get("is_fake", False)
         
-        # ✅ Agar fake hai aur show_fake False hai to skip
         if is_fake and not show_fake:
             continue
         
@@ -1862,7 +1800,7 @@ def get_leaderboard_users():
                 "username": username,
                 "win": user_data.get('win_count', 0),
                 "loss": user_data.get('loss_count', 0),
-                "level": user_data.get('level', 0),
+                "level": user_data.get('level', 1),
                 "total": total_plays,
                 "rank_emoji": rank_data["emoji"],
                 "rank_name": rank_data["rank"],
@@ -2309,7 +2247,7 @@ def get_analysis_banner(period, category, num1, num2):
 └─[ ⚠ 𝗘𝗗𝗨𝗖𝗔𝗧𝗜𝗢𝗡𝗔𝗟 𝗣𝗨𝗥𝗣𝗢𝗦𝗘 ]
 """
 
-def get_stats_banner_with_level(win, loss, game_level, profile_level, period, category, num1, num2, player_result=None, next_prediction=None):
+def get_stats_banner_with_level(win, loss, level, period, category, num1, num2, player_result=None, next_prediction=None):
     total_plays = win + loss
     rank_data = get_aura_rank(total_plays)
     
@@ -2320,8 +2258,7 @@ def get_stats_banner_with_level(win, loss, game_level, profile_level, period, ca
 ├─[ 𝗦𝗘𝗦𝗦𝗜𝗢𝗡 ]
 │ ├─ 🏆 𝗪𝗜𝗡   :: {win:02d}
 │ ├─ ❌ 𝗟𝗢𝗦𝗦  :: {loss:02d}
-│ ├─ 🎮 𝗚𝗔𝗠𝗘 𝗟𝗩𝗟 :: {game_level:02d}
-│ ├─ 📈 𝗣𝗥𝗢𝗙𝗜𝗟𝗘 𝗟𝗩𝗟 :: {profile_level:02d}
+│ ├─ 📈 𝗟𝗘𝗩𝗘𝗟 :: {level:02d}
 │ └─ 📊 𝗧𝗢𝗧𝗔𝗟 :: {total_plays:02d}
 │
 ├─[ 𝗥𝗔𝗡𝗞 ]
@@ -2454,14 +2391,14 @@ async def study_callback(update, context):
 ├─ 🎯 Confidence Scoring: ✅ Active
 ├─ 🔒 Period Lock: ✅ Active
 ├─ ⚡ 3-Press Rule: ✅ Active
-├─ 📈 Game Level vs Profile Level: ✅ Active
+├─ 📈 Single Level System: ✅ Active
 ├─ 🏅 Rare Achievement Display: ✅ Active
 ├─ ⏰ 30min Fake Players Add: ✅ Active
 ├─ 🏆 2 Achievements Display: ✅ Active
 └─ 👥 100+ Concurrent Players: ✅ Active
 
 ━━━━━━━━━━━━━━━━━━━━━━
-💡 *Algorithm Version:* v10.0
+💡 *Algorithm Version:* v11.0
 🕐 *Last Updated:* {datetime.now().strftime('%Y-%m-%d %H:%M')}
 """
             
@@ -2477,10 +2414,10 @@ async def study_callback(update, context):
 ━━━━━━━━━━━━━━━━━━━━━━
 
 📌 *Latest Algorithm Added:*
-🔹 *v10.0 - Game Level vs Profile Level + 30min Fake Players + 2 Achievements Display*
+🔹 *v11.0 - Single Level System + 30min Fake Players + 2 Achievements*
 
 📝 *Description:*
-Game play level alag (win=reset, loss=+1), Profile level alag (wins/5). Har 30 min par fake players add. Har player ko 2 achievements show (selected + 1 random ya AI 2 random).
+Game Level hata diya. Sirf ek Level system. Win = Reset to 1, Loss = +1. Har 30 min par fake players add. Har player ko 2 achievements show.
 
 ━━━━━━━━━━━━━━━━━━━━━━
 📊 *PREVIOUS VERSIONS:*
@@ -3081,8 +3018,7 @@ async def start(update, context):
                 "joined": str(datetime.now()), 
                 "win_count": 0, 
                 "loss_count": 0, 
-                "level": 0,
-                "game_level": 0,
+                "level": 1,
                 "rank_level": 0,
                 "previous_rank": None,
                 "device_id": device_info["device_id"],
@@ -3137,8 +3073,7 @@ async def start_button(update, context):
             if uid in users:
                 users[uid]['win_count'] = 0
                 users[uid]['loss_count'] = 0
-                users[uid]['level'] = 0
-                users[uid]['game_level'] = 0
+                users[uid]['level'] = 1  # Reset to 1
                 await safe_save_json("users.json", users)
         
         await send_typing(context, update.effective_chat.id)
@@ -3468,8 +3403,7 @@ async def back_to_profile_callback(update, context):
         user = users.get(uid, {})
         win = user.get('win_count', 0)
         loss = user.get('loss_count', 0)
-        profile_level = user.get('level', 0)
-        game_level = user.get('game_level', 0)
+        level = user.get('level', 1)
         total_plays = win + loss
         rank_data = get_aura_rank(total_plays)
         progress = get_rank_progress(total_plays)
@@ -3546,8 +3480,7 @@ async def back_to_profile_callback(update, context):
 ├─ 𝗦𝗧𝗔𝗧𝗦
 │ ├─ 🏆 𝗪𝗜𝗡   :: {win}
 │ ├─ ❌ 𝗟𝗢𝗦𝗦  :: {loss}
-│ ├─ 🎮 𝗚𝗔𝗠𝗘 𝗟𝗩𝗟 :: {game_level}
-│ ├─ 📈 𝗣𝗥𝗢𝗙𝗜𝗟𝗘 𝗟𝗩𝗟 :: {profile_level}
+│ ├─ 📈 𝗟𝗘𝗩𝗘𝗟 :: {level}
 │ ├─ 📊 𝗧𝗢𝗧𝗔𝗟 :: {total_plays}
 │ ├─ 🔥 𝗦𝗧𝗥𝗘𝗔𝗞 :: {streak}
 │ └─ 👑 𝗠𝗔𝗫 𝗦𝗧𝗥𝗘𝗔𝗞 :: {max_streak}
@@ -3575,7 +3508,7 @@ async def back_to_profile_callback(update, context):
         await query.edit_message_text("❌ Error loading profile!", reply_markup=main_menu)
 
 # ==========================================
-# ⭐ LEADERBOARD - 2 ACHIEVEMENTS PER PLAYER (UPDATED)
+# ⭐ LEADERBOARD - 2 ACHIEVEMENTS PER PLAYER
 # ==========================================
 async def leaderboard(update, context):
     try:
@@ -3601,7 +3534,7 @@ async def leaderboard(update, context):
         for i, user in enumerate(top_10):
             medal = medals[i] if i < len(medals) else f"{i+1}."
             name = user["username"] if user["username"] != "Unknown" else user["name"]
-            level = user.get('level', 0)
+            level = user.get('level', 1)
             total = user.get('total', 0)
             
             user_id = user["id"]
@@ -3624,10 +3557,7 @@ async def leaderboard(update, context):
             achievements_to_show = []
             
             if has_saved_selection and selected and selected in unlocked:
-                # Case 1: User ne select kiya hai → Selected + 1 random rare
                 achievements_to_show.append((selected, ACHIEVEMENTS.get(selected, {}).get('rarity', 'common')))
-                
-                # 1 random rare achievement (selected ke alawa)
                 remaining = [a for a in unlocked if a != selected]
                 rare_remaining = get_rare_achievements(remaining)
                 if rare_remaining:
@@ -3637,26 +3567,21 @@ async def leaderboard(update, context):
                     random_ach = random.choice(remaining)
                     achievements_to_show.append((random_ach, ACHIEVEMENTS.get(random_ach, {}).get('rarity', 'common')))
             else:
-                # Case 2: User ne select nahi kiya → AI 2 random achievements show karega
                 rare = get_rare_achievements(unlocked)
                 if len(rare) >= 2:
-                    # 2 rare achievements
                     selected_rare = random.sample(rare, 2)
                     achievements_to_show = selected_rare
                 elif len(rare) == 1:
-                    # 1 rare + 1 random
                     achievements_to_show.append(rare[0])
                     remaining = [a for a in unlocked if a != rare[0][0]]
                     if remaining:
                         random_ach = random.choice(remaining)
                         achievements_to_show.append((random_ach, ACHIEVEMENTS.get(random_ach, {}).get('rarity', 'common')))
                 elif len(unlocked) >= 2:
-                    # 2 random achievements
                     selected_random = random.sample(unlocked, 2)
                     for ach in selected_random:
                         achievements_to_show.append((ach, ACHIEVEMENTS.get(ach, {}).get('rarity', 'common')))
                 elif len(unlocked) == 1:
-                    # 1 achievement
                     achievements_to_show.append((unlocked[0], ACHIEVEMENTS.get(unlocked[0], {}).get('rarity', 'common')))
             
             if achievements_to_show:
@@ -3677,7 +3602,7 @@ async def leaderboard(update, context):
             user_data = users[uid]
             total_plays = user_data.get('win_count', 0) + user_data.get('loss_count', 0)
             rank_data = get_aura_rank(total_plays)
-            level = user_data.get('level', 0)
+            level = user_data.get('level', 1)
             
             pos = 1
             for i, user in enumerate(all_users, 1):
@@ -3701,7 +3626,6 @@ async def leaderboard(update, context):
             selected_ach = user_data.get('selected_achievement', None)
             has_saved = user_data.get('selected_achievement_saved', False)
             
-            # ✅ Apne bhi 2 achievements show karo
             my_achievements = []
             if has_saved and selected_ach and selected_ach in unlocked:
                 my_achievements.append((selected_ach, ACHIEVEMENTS.get(selected_ach, {}).get('rarity', 'common')))
@@ -3754,7 +3678,7 @@ async def leaderboard(update, context):
         await update.message.reply_text("❌ Error loading leaderboard!", reply_markup=main_menu)
 
 # ==========================================
-# ⭐ PROFILE HISTORY - DOPAMINE HIT
+# ⭐ PROFILE HISTORY - UPDATED
 # ==========================================
 
 async def profile_history_callback(update, context):
@@ -3772,13 +3696,12 @@ async def profile_history_callback(update, context):
         
         win = user.get('win_count', 0)
         loss = user.get('loss_count', 0)
-        profile_level = user.get('level', 0)
-        game_level = user.get('game_level', 0)
+        level = user.get('level', 1)
         total_plays = win + loss
         
-        highest_level = user.get('highest_level', profile_level)
-        if profile_level > highest_level:
-            highest_level = profile_level
+        highest_level = user.get('highest_level', level)
+        if level > highest_level:
+            highest_level = level
             users[uid]['highest_level'] = highest_level
             await safe_save_json("users.json", users)
         
@@ -3850,8 +3773,7 @@ async def profile_history_callback(update, context):
 ━━━━━━━━━━━━━━━━━━━━━━
 📈 *RANK & LEVEL*
 ├─ 🎖️ *Current Rank* :: {rank_data['emoji']} {rank_data['rank']}
-├─ 🎮 *Game Level* :: {game_level}
-├─ 📈 *Profile Level* :: {profile_level}
+├─ 📈 *Current Level* :: {level}
 ├─ 👑 *Highest Level* :: {highest_level} ⭐
 └─ 🚀 *Next Rank* :: {progress['next']['rank'] if progress['next'] else '🏆 MAX'}
 
@@ -3951,8 +3873,7 @@ async def profile(update, context):
         
         win = user.get('win_count', 0)
         loss = user.get('loss_count', 0)
-        profile_level = user.get('level', 0)
-        game_level = user.get('game_level', 0)
+        level = user.get('level', 1)
         total_plays = win + loss
         rank_data = get_aura_rank(total_plays)
         progress = get_rank_progress(total_plays)
@@ -4029,8 +3950,7 @@ async def profile(update, context):
 ├─ 𝗦𝗧𝗔𝗧𝗦
 │ ├─ 🏆 𝗪𝗜𝗡   :: {win}
 │ ├─ ❌ 𝗟𝗢𝗦𝗦  :: {loss}
-│ ├─ 🎮 𝗚𝗔𝗠𝗘 𝗟𝗩𝗟 :: {game_level}
-│ ├─ 📈 𝗣𝗥𝗢𝗙𝗜𝗟𝗘 𝗟𝗩𝗟 :: {profile_level}
+│ ├─ 📈 𝗟𝗘𝗩𝗘𝗟 :: {level}
 │ ├─ 📊 𝗧𝗢𝗧𝗔𝗟 :: {total_plays}
 │ ├─ 🔥 𝗦𝗧𝗥𝗘𝗔𝗞 :: {streak}
 │ └─ 👑 𝗠𝗔𝗫 𝗦𝗧𝗥𝗘𝗔𝗞 :: {max_streak}
@@ -4488,7 +4408,7 @@ async def achievements(update, context):
         
         win = user.get('win_count', 0)
         loss = user.get('loss_count', 0)
-        level = user.get('level', 0)
+        level = user.get('level', 1)
         total_plays = win + loss
         
         progress = get_rank_progress(total_plays)
@@ -4806,8 +4726,7 @@ Example:
 📊 *STATS*
 ├─ 🏆 Wins   :: {user_data.get('win_count', 0)}
 ├─ ❌ Losses :: {user_data.get('loss_count', 0)}
-├─ 🎮 Game Level :: {user_data.get('game_level', 0)}
-├─ 📈 Profile Level :: {user_data.get('level', 0)}
+├─ 📈 Level  :: {user_data.get('level', 1)}
 └─ 🏆 Achievements :: {len(user_data.get('achievements', {}).get('unlocked', []))}/82
 
 👑 *Admin:* @{update.effective_user.username}
@@ -5101,7 +5020,7 @@ async def timer_select(update, context):
         
         if uid not in users:
             device_info = get_user_details(update)
-            users[uid] = {"id": uid, "name": update.effective_user.username or "Unknown", "joined": str(datetime.now()), "win_count": 0, "loss_count": 0, "level": 0, "game_level": 0, "rank_level": 0, "previous_rank": None, "device_id": device_info["device_id"], "ip_address": device_info["ip_address"], "free_trial_used": False, "free_trial_expiry": None, "username": device_info["username"], "first_name": device_info["first_name"], "last_name": device_info["last_name"], "language_code": device_info["language_code"], "achievements": {"unlocked": []}}
+            users[uid] = {"id": uid, "name": update.effective_user.username or "Unknown", "joined": str(datetime.now()), "win_count": 0, "loss_count": 0, "level": 1, "rank_level": 0, "previous_rank": None, "device_id": device_info["device_id"], "ip_address": device_info["ip_address"], "free_trial_used": False, "free_trial_expiry": None, "username": device_info["username"], "first_name": device_info["first_name"], "last_name": device_info["last_name"], "language_code": device_info["language_code"], "achievements": {"unlocked": []}}
             await safe_save_json("users.json", users)
             logger.info(f"✅ New user created in timer: {uid}")
         timer_map = {"⏱ 30s": "30", "⏱ 1m": "60", "⏱ 2m": "120", "⏱ 5m": "300"}
@@ -5275,7 +5194,7 @@ async def process_analysis(update, context, uid, periods=None, last_period=None)
         await update.message.reply_text("❌ Error! Please try again.", reply_markup=result_keyboard)
 
 # ==========================================
-# ⭐ HANDLE RESULT - UPDATED WITH GAME LEVEL VS PROFILE LEVEL
+# ⭐ HANDLE RESULT - SINGLE LEVEL SYSTEM
 # ==========================================
 
 async def handle_result(update, context):
@@ -5335,13 +5254,11 @@ async def handle_result(update, context):
                 if 'win_count' not in users[uid]:
                     users[uid]['win_count'] = 0
                     users[uid]['loss_count'] = 0
-                    users[uid]['level'] = 0
-                    users[uid]['game_level'] = 0
+                    users[uid]['level'] = 1
                 
-                # ✅ GAME LEVEL UPDATE (session based)
-                current_game_level = users[uid].get('game_level', 0)
-                new_game_level = calculate_game_level(current_game_level, win)
-                users[uid]['game_level'] = new_game_level
+                current_level = users[uid].get('level', 1)
+                new_level = calculate_level(current_level, win)
+                users[uid]['level'] = new_level
                 
                 old_total = users[uid]['win_count'] + users[uid]['loss_count']
                 old_rank = get_aura_rank(old_total)
@@ -5350,9 +5267,6 @@ async def handle_result(update, context):
                     users[uid]['win_count'] += 1
                 else:
                     users[uid]['loss_count'] += 1
-                
-                # ✅ PROFILE LEVEL UPDATE (wins based)
-                users[uid]['level'] = calculate_profile_level(users[uid]['win_count'])
                 
                 new_total = users[uid]['win_count'] + users[uid]['loss_count']
                 new_rank = get_aura_rank(new_total)
@@ -5510,7 +5424,6 @@ async def handle_result(update, context):
             banner = get_stats_banner_with_level(
                 users[uid]['win_count'],
                 users[uid]['loss_count'],
-                users[uid].get('game_level', 0),
                 users[uid]['level'],
                 next_period,
                 next_category,
@@ -5739,7 +5652,7 @@ async def handle_buttons(update, context):
         users = safe_load_json("users.json")
         if uid not in users:
             device_info = get_user_details(update)
-            users[uid] = {"id": uid, "name": update.effective_user.username or "Unknown", "joined": str(datetime.now()), "win_count": 0, "loss_count": 0, "level": 0, "game_level": 0, "rank_level": 0, "previous_rank": None, "device_id": device_info["device_id"], "ip_address": device_info["ip_address"], "free_trial_used": False, "free_trial_expiry": None, "username": device_info["username"], "first_name": device_info["first_name"], "last_name": device_info["last_name"], "language_code": device_info["language_code"], "achievements": {"unlocked": []}}
+            users[uid] = {"id": uid, "name": update.effective_user.username or "Unknown", "joined": str(datetime.now()), "win_count": 0, "loss_count": 0, "level": 1, "rank_level": 0, "previous_rank": None, "device_id": device_info["device_id"], "ip_address": device_info["ip_address"], "free_trial_used": False, "free_trial_expiry": None, "username": device_info["username"], "first_name": device_info["first_name"], "last_name": device_info["last_name"], "language_code": device_info["language_code"], "achievements": {"unlocked": []}}
             await safe_save_json("users.json", users)
             logger.info(f"✅ New user created: {uid}")
         
@@ -6091,7 +6004,7 @@ def main():
     except Exception as e:
         logger.error(f"Failed to start daily random players: {e}")
     
-    # ✅ NEW: 30 MINUTES FAKE PLAYERS ADD
+    # ✅ 30 MINUTES FAKE PLAYERS ADD
     try:
         start_fake_players_30min()
     except Exception as e:
@@ -6101,7 +6014,7 @@ def main():
     thread.start()
     print("✅ Health check server running on port 10000!")
     print("=" * 50)
-    print("🌟 AURA BOT v10.0 STARTED!")
+    print("🌟 AURA BOT v11.0 STARTED!")
     print("=" * 50)
     print("✅ Bot is running!")
     print(f"👑 Super Admin: {SUPER_ADMIN_IDS}")
@@ -6126,8 +6039,7 @@ def main():
     print("📊 Bot Stats Dashboard: ENABLED (Admin only)")
     print("📊 New Players Stats: ENABLED (Admin/Super Admin)")
     print("💾 Auto-Backup: ENABLED (Daily)")
-    print("🎮 GAME LEVEL: ENABLED (Win=Reset, Loss=+1)")
-    print("📈 PROFILE LEVEL: ENABLED (Wins/5)")
+    print("📈 SINGLE LEVEL SYSTEM: ENABLED (Win=Reset to 1, Loss=+1)")
     print("⏰ 30MIN FAKE PLAYERS: ENABLED (Har 30 min par add)")
     print("⏰ Auto-Play Increase: ENABLED (Every hour)")
     print("🔄 Dynamic Top 3: ENABLED (Every 2-4 hours)")
@@ -6154,6 +6066,7 @@ def main():
     print("✅ STUDY PANEL: ENABLED (Super Admin Only)")
     print("✅ BIG/SMALL BUTTONS: REMOVED (Only Numbers)")
     print("✅ 100+ CONCURRENT PLAYERS: ENABLED (Optimized Locking)")
+    print("✅ GAME LEVEL: REMOVED (Single Level System)")
     print("✅ ALL ERRORS FIXED")
     print("=" * 50)
     app.run_polling()
