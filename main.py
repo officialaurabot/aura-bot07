@@ -1,5 +1,5 @@
 # ==========================================
-# 🌌 AURA BOT v10.0 - COMPLETE FIXED
+# 🌌 AURA BOT v12.0 - COMPLETE FIXED
 # ==========================================
 
 import logging
@@ -46,6 +46,7 @@ if not TOKEN:
 
 SUPER_ADMIN_IDS = [5901835425]
 ADMIN_IDS = [5901835425, 6467765686, 7295714098, 7495428732]
+SUPER_ADMIN_IDS_STR = [str(x) for x in SUPER_ADMIN_IDS]
 
 BROADCAST_HISTORY = []
 FEEDBACK_LIST = []
@@ -105,7 +106,7 @@ ALGORITHM_HISTORY = [
     {
         "version": "v7.0",
         "name": "Wins-Based Level System",
-        "description": "Total wins ke hisaab se level update (har 5 wins = 1 level)",
+        "description": "Total wins ke hisaab se level update",
         "added_by": "System",
         "date": "2026-09-10",
         "status": "deprecated"
@@ -121,25 +122,33 @@ ALGORITHM_HISTORY = [
     {
         "version": "v9.0",
         "name": "100+ Concurrent Players Support",
-        "description": "BIG/SMALL buttons removed. Only numbers. 100 players simultaneously play kar sakte hain without lag. Optimized locking, async processing.",
+        "description": "BIG/SMALL buttons removed. Only numbers. 100 players simultaneously play kar sakte hain without lag.",
         "added_by": "System",
         "date": "2026-09-10",
         "status": "active"
     },
     {
         "version": "v10.0",
-        "name": "Game Level vs Profile Level + 30min Fake Players + 2 Achievements Display",
-        "description": "Game play level alag (win=reset, loss=+1), Profile level alag (wins/5). Har 30 min par fake players add. Har player ko 2 achievements show.",
+        "name": "Game Level vs Profile Level",
+        "description": "Game play level alag, Profile level alag",
         "added_by": "System",
         "date": "2026-09-11",
         "status": "deprecated"
     },
     {
         "version": "v11.0",
-        "name": "Single Level System + 30min Fake Players + 2 Achievements",
-        "description": "Game Level hata diya. Sirf ek Level system. Win = Reset to 1, Loss = +1. Har 30 min par fake players add. Har player ko 2 achievements show.",
+        "name": "Single Level System",
+        "description": "Game Level hata diya. Sirf ek Level system. Win = Reset to 1, Loss = +1.",
         "added_by": "System",
         "date": "2026-09-11",
+        "status": "active"
+    },
+    {
+        "version": "v12.0",
+        "name": "Super Admin Play + Teach Button + Algorithm Tracking",
+        "description": "Sirf Super Admin ka number algorithm mein add hoga. Teach button se graph, numbers list, tracking sab dikhega. Sequence tracking bhi active.",
+        "added_by": "System",
+        "date": "2026-09-12",
         "status": "active"
     }
 ]
@@ -149,6 +158,19 @@ ALGORITHM_HISTORY = [
 # ==========================================
 GLOBAL_PERIOD_RESULTS = {}
 USER_PRESS_TRACKER = {}
+
+# ==========================================
+# ⭐ ALGORITHM TRACKING (NEW)
+# ==========================================
+ALGORITHM_STATS = {
+    "initial_count": 0,          # Pehle kitne numbers the
+    "added_by_super_admin": 0,   # Super Admin ne kitne add kiye
+    "skipped_by_players": 0,     # Normal players ke kitne skip hue
+    "daily_additions": {},       # {"2026-09-12": 5, "2026-09-11": 8}
+    "last_updated": datetime.now().isoformat(),
+    "total_added_today": 0,
+    "new_numbers_history": []    # Last 50 numbers jo add hue
+}
 
 # ==========================================
 # ⭐ CONCURRENT PLAYERS LOCK (OPTIMIZED FOR 100+)
@@ -161,20 +183,17 @@ _CACHED_LAST_SAVE = datetime.now()
 _CACHE_LOCK = asyncio.Lock()
 _SAVE_INTERVAL = 10
 
-# ✅ PER-USER LOCK - Sirf ek user ke operations lock honge, baaki parallel
 def get_user_lock(uid):
     if uid not in USER_LOCKS:
         USER_LOCKS[uid] = asyncio.Lock()
     return USER_LOCKS[uid]
 
-# ✅ GLOBAL SEMAPHORE - 100+ concurrent tasks limit
 CONCURRENT_SEMAPHORE = asyncio.Semaphore(200)
 
 # ==========================================
 # ⭐ CACHED DATA (FAST ACCESS)
 # ==========================================
 def load_all_data():
-    """Load all data into cache"""
     global _CACHED_USERS, _CACHED_VIP, _CACHED_PAY
     try:
         if os.path.exists("users.json"):
@@ -204,7 +223,6 @@ def load_all_data():
         _CACHED_PAY = {}
 
 async def save_all_data():
-    """Save all cached data to files"""
     global _CACHED_LAST_SAVE
     async with _CACHE_LOCK:
         try:
@@ -221,7 +239,6 @@ async def save_all_data():
             return False
 
 async def safe_save_json(filename, data):
-    """Save data to cache (fast)"""
     global _CACHED_LAST_SAVE
     if filename == "users.json":
         _CACHED_USERS = data
@@ -235,7 +252,6 @@ async def safe_save_json(filename, data):
     return True
 
 def safe_load_json(filename):
-    """Load data from cache (fast)"""
     if filename == "users.json":
         return _CACHED_USERS
     elif filename == "vip.json":
@@ -252,15 +268,10 @@ def safe_load_json(filename):
 #   Loss → Level = Level + 1
 
 def calculate_level(current_level, win):
-    """
-    Level update rule:
-    - Win  → Reset to 1
-    - Loss → +1
-    """
     if win:
-        return 1  # Win par reset to 1
+        return 1
     else:
-        return current_level + 1  # Loss par +1
+        return current_level + 1
 
 # ==========================================
 # ⭐ DAILY BONUS SYSTEM
@@ -330,7 +341,6 @@ def get_streak_bonus(streak):
 # ==========================================
 
 ACHIEVEMENTS = {
-    # ========== GAME PLAY (14) ==========
     "🎮 First Game": {"condition": "games_1", "desc": "Play your first game", "rarity": "common"},
     "🎯 10 Games": {"condition": "games_10", "desc": "Play 10 games", "rarity": "common"},
     "🎯 25 Games": {"condition": "games_25", "desc": "Play 25 games", "rarity": "common"},
@@ -345,8 +355,6 @@ ACHIEVEMENTS = {
     "🎯 25000 Games": {"condition": "games_25000", "desc": "Play 25000 games", "rarity": "legendary"},
     "🎯 50000 Games": {"condition": "games_50000", "desc": "Play 50000 games", "rarity": "legendary"},
     "🎯 100000 Games": {"condition": "games_100000", "desc": "Play 100000 games", "rarity": "mythic"},
-    
-    # ========== WINS (14) ==========
     "🏅 First Win": {"condition": "wins_1", "desc": "Win your first game", "rarity": "common"},
     "🏆 10 Wins": {"condition": "wins_10", "desc": "Win 10 games", "rarity": "common"},
     "🏆 25 Wins": {"condition": "wins_25", "desc": "Win 25 games", "rarity": "common"},
@@ -361,8 +369,6 @@ ACHIEVEMENTS = {
     "🏆 25000 Wins": {"condition": "wins_25000", "desc": "Win 25000 games", "rarity": "legendary"},
     "🏆 50000 Wins": {"condition": "wins_50000", "desc": "Win 50000 games", "rarity": "legendary"},
     "🏆 100000 Wins": {"condition": "wins_100000", "desc": "Win 100000 games", "rarity": "mythic"},
-    
-    # ========== STREAK (12) ==========
     "🔥 3 Streak": {"condition": "streak_3", "desc": "Win 3 in a row", "rarity": "common"},
     "🔥 5 Streak": {"condition": "streak_5", "desc": "Win 5 in a row", "rarity": "common"},
     "🔥 10 Streak": {"condition": "streak_10", "desc": "Win 10 in a row", "rarity": "uncommon"},
@@ -375,8 +381,6 @@ ACHIEVEMENTS = {
     "🔥 100 Streak": {"condition": "streak_100", "desc": "Win 100 in a row", "rarity": "legendary"},
     "🔥 150 Streak": {"condition": "streak_150", "desc": "Win 150 in a row", "rarity": "legendary"},
     "🔥 200 Streak": {"condition": "streak_200", "desc": "Win 200 in a row", "rarity": "mythic"},
-    
-    # ========== LEVEL (10) ==========
     "⭐ Level 5": {"condition": "level_5", "desc": "Reach Level 5", "rarity": "common"},
     "⭐ Level 10": {"condition": "level_10", "desc": "Reach Level 10", "rarity": "uncommon"},
     "⭐ Level 15": {"condition": "level_15", "desc": "Reach Level 15", "rarity": "uncommon"},
@@ -387,25 +391,17 @@ ACHIEVEMENTS = {
     "⭐ Level 50": {"condition": "level_50", "desc": "Reach Level 50", "rarity": "ultra_rare"},
     "⭐ Level 75": {"condition": "level_75", "desc": "Reach Level 75", "rarity": "legendary"},
     "⭐ Level 100": {"condition": "level_100", "desc": "Reach Level 100", "rarity": "mythic"},
-    
-    # ========== VIP (4) ==========
     "👑 Royal Player": {"condition": "vip", "desc": "Become a VIP Member", "rarity": "uncommon"},
     "💎 Diamond VIP": {"condition": "vip_30", "desc": "VIP for 30 days", "rarity": "rare"},
     "👑 King VIP": {"condition": "vip_90", "desc": "VIP for 90 days", "rarity": "very_rare"},
     "👑 Emperor VIP": {"condition": "vip_365", "desc": "VIP for 365 days", "rarity": "legendary"},
-    
-    # ========== BONUS (3) ==========
     "🎁 Daily Bonus": {"condition": "bonus_7", "desc": "Claim daily bonus 7 times", "rarity": "uncommon"},
     "🎁 Weekly Bonus": {"condition": "bonus_week", "desc": "Claim weekly rewards", "rarity": "rare"},
     "🎁 Monthly Bonus": {"condition": "bonus_month", "desc": "Claim monthly rewards", "rarity": "very_rare"},
-    
-    # ========== REFERRAL (4) ==========
     "👥 Recruiter": {"condition": "ref_1", "desc": "Refer 1 friend", "rarity": "uncommon"},
     "👥 Super Recruiter": {"condition": "ref_10", "desc": "Refer 10 friends", "rarity": "rare"},
     "👥 Mega Recruiter": {"condition": "ref_50", "desc": "Refer 50 friends", "rarity": "very_rare"},
     "👥 Legendary Recruiter": {"condition": "ref_100", "desc": "Refer 100 friends", "rarity": "legendary"},
-    
-    # ========== DAILY STREAK (7) ==========
     "📅 7 Day Streak": {"condition": "daily_7", "desc": "Play 7 days in a row", "rarity": "uncommon"},
     "📅 15 Day Streak": {"condition": "daily_15", "desc": "Play 15 days in a row", "rarity": "rare"},
     "📅 30 Day Streak": {"condition": "daily_30", "desc": "Play 30 days in a row", "rarity": "very_rare"},
@@ -413,14 +409,10 @@ ACHIEVEMENTS = {
     "📅 90 Day Streak": {"condition": "daily_90", "desc": "Play 90 days in a row", "rarity": "ultra_rare"},
     "📅 180 Day Streak": {"condition": "daily_180", "desc": "Play 180 days in a row", "rarity": "legendary"},
     "📅 365 Day Streak": {"condition": "daily_365", "desc": "Play 365 days in a row", "rarity": "mythic"},
-    
-    # ========== PERFECT PREDICTION (4) ==========
     "🎯 Perfect Prediction": {"condition": "perfect_5", "desc": "Win 5 times in a row", "rarity": "rare"},
     "🎯 God Mode": {"condition": "perfect_20", "desc": "Win 20 times in a row", "rarity": "very_rare"},
     "🎯 Unstoppable": {"condition": "perfect_50", "desc": "Win 50 times in a row", "rarity": "legendary"},
     "🎯 Invincible": {"condition": "perfect_100", "desc": "Win 100 times in a row", "rarity": "mythic"},
-    
-    # ========== ULTIMATE (10) ==========
     "👑 Ultimate Legend": {"condition": "all_achievements", "desc": "All achievements completed", "rarity": "mythic"},
     "🏆 GOD OF AURA": {"condition": "plays_100000", "desc": "100,000 total plays", "rarity": "mythic"},
     "💎 AURA MASTER": {"condition": "wins_50000", "desc": "50,000 total wins", "rarity": "mythic"},
@@ -998,6 +990,7 @@ async def auto_backup():
                 'vip': vip,
                 'pay': pay,
                 'history': history,
+                'algorithm_stats': ALGORITHM_STATS,
                 'timestamp': datetime.now().isoformat()
             }
             
@@ -1159,14 +1152,12 @@ FAKE_PLAYER_NAMES = [
 ]
 
 async def add_fake_players_every_30min():
-    """Har 30 minutes par 1-2 naye fake players add karo"""
     while True:
         try:
-            await asyncio.sleep(1800)  # 30 minutes = 1800 seconds
+            await asyncio.sleep(1800)
             
             users = safe_load_json("users.json")
             
-            # 1-2 fake players select karo
             count = random.randint(1, 2)
             selected = random.sample(FAKE_PLAYER_NAMES, count)
             
@@ -1174,7 +1165,6 @@ async def add_fake_players_every_30min():
             for fake in selected:
                 username = fake["username"]
                 
-                # Check karo already exists toh nahi
                 exists = False
                 for uid, user_data in users.items():
                     if user_data.get("username") == username:
@@ -1182,13 +1172,11 @@ async def add_fake_players_every_30min():
                         break
                 
                 if not exists:
-                    # Random wins/losses generate karo
                     wins = random.randint(1, 15)
                     losses = random.randint(1, 10)
                     total_plays = wins + losses
                     rank_data = get_aura_rank(total_plays)
                     
-                    # Random achievements unlock karo
                     unlocked_achievements = []
                     if total_plays >= 1:
                         unlocked_achievements.append("🎮 First Game")
@@ -1217,7 +1205,7 @@ async def add_fake_players_every_30min():
                         "joined": str(datetime.now()),
                         "win_count": wins,
                         "loss_count": losses,
-                        "level": 1,  # Default level 1
+                        "level": 1,
                         "rank_level": rank_data["level"],
                         "previous_rank": None,
                         "device_id": f"dev_{random.randint(1000,9999)}",
@@ -1247,81 +1235,6 @@ def start_fake_players_30min():
     thread = threading.Thread(target=wrapper, daemon=True)
     thread.start()
     logger.info("✅ Fake players 30min thread started!")
-
-# ==========================================
-# ⭐ DAILY RANDOM PLAYERS (OLD - KEEP FOR BACKUP)
-# ==========================================
-DAILY_PLAYER_TRACKER = {}
-
-async def add_daily_random_players():
-    while True:
-        try:
-            wait_time = random.randint(28800, 43200)
-            await asyncio.sleep(wait_time)
-            
-            users = safe_load_json("users.json")
-            
-            new_fake_users = [
-                {"name": "Ravi Kumar", "username": "ravi_kumar", "win": random.randint(2, 8), "loss": random.randint(1, 4)},
-                {"name": "Neha Singh", "username": "neha_singh", "win": random.randint(3, 10), "loss": random.randint(1, 5)},
-                {"name": "Vikram Shah", "username": "vikram_shah", "win": random.randint(1, 6), "loss": random.randint(0, 3)},
-                {"name": "Pooja Reddy", "username": "pooja_reddy", "win": random.randint(4, 12), "loss": random.randint(2, 6)},
-                {"name": "Amit Verma", "username": "amit_verma", "win": random.randint(2, 7), "loss": random.randint(1, 4)},
-            ]
-            
-            selected = random.sample(new_fake_users, random.randint(2, 3))
-            
-            added = 0
-            for fake in selected:
-                username = fake["username"]
-                exists = False
-                for uid, user_data in users.items():
-                    if user_data.get("username") == username:
-                        exists = True
-                        break
-                
-                if not exists:
-                    total_plays = fake["win"] + fake["loss"]
-                    rank_data = get_aura_rank(total_plays)
-                    
-                    fake_id = f"user_{username}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
-                    users[fake_id] = {
-                        "id": fake_id,
-                        "name": fake["name"],
-                        "username": fake["username"],
-                        "joined": str(datetime.now()),
-                        "win_count": fake["win"],
-                        "loss_count": fake["loss"],
-                        "level": 1,
-                        "rank_level": rank_data["level"],
-                        "previous_rank": None,
-                        "device_id": f"dev_{random.randint(1000,9999)}",
-                        "ip_address": f"192.168.{random.randint(1,255)}.{random.randint(1,255)}",
-                        "free_trial_used": False,
-                        "free_trial_expiry": None,
-                        "is_fake": True,
-                        "last_active": datetime.now().isoformat(),
-                        "achievements": {"unlocked": []}
-                    }
-                    added += 1
-            
-            if added > 0:
-                await safe_save_json("users.json", users)
-                logger.info(f"✅ Added {added} daily random players!")
-            
-        except Exception as e:
-            logger.error(f"Daily random players error: {e}")
-
-def start_daily_random_players():
-    def wrapper():
-        try:
-            asyncio.run(add_daily_random_players())
-        except Exception as e:
-            logger.error(f"Daily random players thread error: {e}")
-    
-    thread = threading.Thread(target=wrapper, daemon=True)
-    thread.start()
-    logger.info("✅ Daily random players thread started!")
 
 # ==========================================
 # ⭐ BIG/SMALL ANALYSIS ALGORITHM
@@ -1376,6 +1289,9 @@ CLASSIFIED_RESULTS = [
     {"number": num, "size": get_size(num)}
     for num in HISTORICAL_RESULTS
 ]
+
+# ✅ INITIALIZE ALGORITHM STATS
+ALGORITHM_STATS["initial_count"] = len(HISTORICAL_RESULTS)
 
 def get_statistics():
     big_count = sum(1 for r in CLASSIFIED_RESULTS if r["size"] == "BIG")
@@ -1440,16 +1356,48 @@ def get_prediction_with_analysis(current_number):
         'message': f"✅ Found {len(sorted_candidates)} unique numbers after {current}"
     }
 
-def add_result_to_history(number):
+# ✅ UPDATED: Only Super Admin numbers add
+def add_result_to_history(number, is_super_admin=False):
+    """
+    Algorithm mein number add karo
+    - Sirf Super Admin ka number add hoga
+    - Normal player ka number add NAHI hoga
+    """
     try:
         num = int(number)
         if 0 <= num <= 9:
-            HISTORICAL_RESULTS.append(num)
-            CLASSIFIED_RESULTS.append({"number": num, "size": get_size(num)})
-            if len(HISTORICAL_RESULTS) > 500:
-                HISTORICAL_RESULTS.pop(0)
-                CLASSIFIED_RESULTS.pop(0)
-            return True
+            if is_super_admin:
+                HISTORICAL_RESULTS.append(num)
+                CLASSIFIED_RESULTS.append({"number": num, "size": get_size(num)})
+                if len(HISTORICAL_RESULTS) > 1000:
+                    HISTORICAL_RESULTS.pop(0)
+                    CLASSIFIED_RESULTS.pop(0)
+                
+                # ✅ TRACK: Super Admin added
+                ALGORITHM_STATS["added_by_super_admin"] += 1
+                today = datetime.now().date().isoformat()
+                if today not in ALGORITHM_STATS["daily_additions"]:
+                    ALGORITHM_STATS["daily_additions"][today] = 0
+                ALGORITHM_STATS["daily_additions"][today] += 1
+                ALGORITHM_STATS["last_updated"] = datetime.now().isoformat()
+                
+                # ✅ Add to history list
+                ALGORITHM_STATS["new_numbers_history"].append({
+                    "number": num,
+                    "size": "BIG" if num >= 5 else "SMALL",
+                    "time": datetime.now().isoformat(),
+                    "by": "Super Admin"
+                })
+                if len(ALGORITHM_STATS["new_numbers_history"]) > 50:
+                    ALGORITHM_STATS["new_numbers_history"].pop(0)
+                
+                logger.info(f"✅ Super Admin number added to algorithm: {num}")
+                return True
+            else:
+                # Normal player ka number add nahi hoga
+                ALGORITHM_STATS["skipped_by_players"] += 1
+                logger.info(f"⚠️ Normal player number SKIPPED (not added to algorithm): {num}")
+                return False
     except:
         pass
     return False
@@ -1755,8 +1703,6 @@ def initialize_fake_users():
                 "achievements": {"unlocked": unlocked_achievements}
             }
             fake_added += 1
-            
-            logger.info(f"✅ Fake user {username}: {len(unlocked_achievements)} achievements unlocked")
     
     if fake_added > 0:
         safe_save_json("users.json", users)
@@ -1953,7 +1899,6 @@ WIN_DOPAMINE = [
 """,
 ]
 
-# ✅ ========== DOPAMINE HIT EMOJIS (LOSS - 5 VARIATIONS) ==========
 LOSS_DOPAMINE = [
     """
 💪💪💪 *LEGEND IN MAKING!* 💪💪💪
@@ -1988,9 +1933,6 @@ def get_random_win_emoji():
 def get_random_loss_emoji():
     return random.choice(LOSS_DOPAMINE)
 
-# ==========================================
-# OLD WIN/LOSS STICKERS (Keep for backward compatibility)
-# ==========================================
 WIN_STICKERS = WIN_DOPAMINE
 LOSS_STICKERS = LOSS_DOPAMINE
 
@@ -2010,7 +1952,6 @@ def save(f, d):
     with open(f, 'w') as x:
         json.dump(d, x, indent=4)
 
-# ✅ Load all data on startup
 load_all_data()
 initialize_fake_users()
 
@@ -2122,14 +2063,22 @@ admin_menu = ReplyKeyboardMarkup([
     ["🔙 BACK"]
 ], resize_keyboard=True)
 
+# ✅ SUPER ADMIN MENU - NEW BUTTONS ADDED
 super_admin_menu = ReplyKeyboardMarkup([
     ["📊 STATS", "💰 PAYMENTS"],
     ["📢 BROADCAST", "📅 PAYMENT HISTORY"],
     ["📋 APPROVAL LOG", "👑 ADMIN ACTIVITY"],
     ["📝 FEEDBACK LOG", "🛡️ DEVICE TRACKING"],
-    ["📊 NEW PLAYERS"],
-    ["🔬 STUDY"],
+    ["📊 NEW PLAYERS", "🔬 STUDY"],
+    ["▶️ SUPER ADMIN PLAY", "📚 TEACH"],
     ["🔙 BACK"]
+], resize_keyboard=True)
+
+# ✅ SUPER ADMIN PLAY MENU
+super_admin_play_menu = ReplyKeyboardMarkup([
+    ["0️⃣", "1️⃣", "2️⃣", "3️⃣", "4️⃣"],
+    ["5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣"],
+    ["⏱ TIMER", "🏠 HOME"]
 ], resize_keyboard=True)
 
 timer_menu = ReplyKeyboardMarkup([
@@ -2138,14 +2087,12 @@ timer_menu = ReplyKeyboardMarkup([
     ["🏠 HOME"]
 ], resize_keyboard=True)
 
-# ✅ BIG/SMALL BUTTONS REMOVED - ONLY NUMBERS
 result_number_menu = ReplyKeyboardMarkup([
     ["0️⃣", "1️⃣", "2️⃣", "3️⃣", "4️⃣"],
     ["5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣"],
     ["⏱ TIMER", "🏠 HOME"]
 ], resize_keyboard=True)
 
-# ✅ RESULT KEYBOARD - ONLY NUMBERS (BIG/SMALL REMOVED)
 result_keyboard = ReplyKeyboardMarkup([
     ["0️⃣", "1️⃣", "2️⃣", "3️⃣", "4️⃣"],
     ["5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣"],
@@ -2277,6 +2224,375 @@ def get_stats_banner_with_level(win, loss, level, period, category, num1, num2, 
     return banner
 
 # ==========================================
+# ⭐ GRAPH BUILDER FUNCTION (NEW)
+# ==========================================
+def build_bar_graph(data_dict, max_days=7):
+    """Simple bar graph builder"""
+    if not data_dict:
+        return "📊 No data available yet"
+    
+    # Last 7 days sorted
+    sorted_days = sorted(data_dict.keys())[-max_days:]
+    
+    if not sorted_days:
+        return "📊 No data available yet"
+    
+    max_value = max(data_dict[d] for d in sorted_days) if sorted_days else 1
+    if max_value == 0:
+        max_value = 1
+    
+    graph = ""
+    for day in sorted_days:
+        count = data_dict[day]
+        # Max 15 blocks
+        bar_length = int((count / max_value) * 15)
+        if bar_length == 0 and count > 0:
+            bar_length = 1
+        
+        bar = "█" * bar_length
+        day_name = datetime.fromisoformat(day).strftime("%a")
+        graph += f"├─ {day_name}: {bar} {count}\n"
+    
+    return graph
+
+# ==========================================
+# ⭐ TEACH PANEL (SUPER ADMIN ONLY) - NEW
+# ==========================================
+async def teach_panel(update, context):
+    """Teach panel - Super Admin only - Shows algorithm tracking"""
+    try:
+        uid = int(update.effective_user.id)
+        
+        if uid not in SUPER_ADMIN_IDS:
+            await update.message.reply_text("❌ Only Super Admin can access TEACH!")
+            return
+        
+        # Current total
+        current_total = len(HISTORICAL_RESULTS)
+        initial_count = ALGORITHM_STATS.get("initial_count", 0)
+        added_by_sa = ALGORITHM_STATS.get("added_by_super_admin", 0)
+        skipped = ALGORITHM_STATS.get("skipped_by_players", 0)
+        
+        # Improvement percentage
+        if initial_count > 0:
+            improvement = ((current_total - initial_count) / initial_count) * 100
+        else:
+            improvement = 0
+        
+        # Graph
+        daily_additions = ALGORITHM_STATS.get("daily_additions", {})
+        graph = build_bar_graph(daily_additions, max_days=7)
+        
+        # Last 10 new numbers
+        new_numbers = ALGORITHM_STATS.get("new_numbers_history", [])[-10:]
+        
+        numbers_list = ""
+        if new_numbers:
+            for i, item in enumerate(reversed(new_numbers), 1):
+                time_str = item.get("time", "")[11:16] if len(item.get("time", "")) >= 16 else ""
+                numbers_list += f"├─ {i}. {item['number']} ({item['size']}) - {time_str}\n"
+        else:
+            numbers_list = "├─ No numbers added yet\n"
+        
+        # Improvement status
+        if improvement >= 20:
+            status = "🔥 EXCELLENT"
+        elif improvement >= 10:
+            status = "💪 GOOD"
+        elif improvement >= 5:
+            status = "📈 IMPROVING"
+        else:
+            status = "🌱 STARTING"
+        
+        msg = f"""
+📚 *TEACH PANEL - ALGORITHM TRACKING*
+━━━━━━━━━━━━━━━━━━━━━━
+
+📊 *ALGORITHM NUMBERS STATISTICS*
+├─ 📈 Pehle Kitne The: {initial_count}
+├─ ✅ Ab Kitne Add Hue: {added_by_sa}
+├─ 🎯 Total Ab: {current_total}
+├─ ⏭️ Player Numbers Skipped: {skipped}
+└─ 🕐 Last Update: {ALGORITHM_STATS.get('last_updated', 'N/A')[:16]}
+
+━━━━━━━━━━━━━━━━━━━━━━
+📈 *GRAPH - LAST 7 DAYS*
+{graph}
+━━━━━━━━━━━━━━━━━━━━━━
+📊 *TOTAL ADDED: {added_by_sa} numbers*
+
+━━━━━━━━━━━━━━━━━━━━━━
+🔢 *NAYE NUMBERS (LAST 10)*
+{numbers_list}
+━━━━━━━━━━━━━━━━━━━━━━
+📊 *IMPROVEMENT TRACKING*
+├─ 📈 Pehle: {initial_count} numbers
+├─ ✅ Ab: {current_total} numbers
+├─ 🎯 Improvement: +{improvement:.1f}%
+└─ 💪 Status: {status}
+
+━━━━━━━━━━━━━━━━━━━━━━
+🧪 *ALGORITHM DETAILS*
+├─ 📊 Self-Learning: ✅ Active
+├─ 🔄 Pattern Recognition: ✅ Active
+├─ 🎯 Confidence Score: ✅ Active
+├─ 🔒 Period Lock: ✅ Active
+├─ ⚡ 3-Press Rule: ✅ Active
+└─ 👑 Super Admin Only Add: ✅ Active
+
+━━━━━━━━━━━━━━━━━━━━━━
+👑 *Super Admin:* @{update.effective_user.username}
+🕐 *Report Time:* {datetime.now().strftime('%I:%M %p')}
+"""
+        
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔄 REFRESH", callback_data="teach_refresh")],
+            [InlineKeyboardButton("📊 DETAILED VIEW", callback_data="teach_detailed")]
+        ])
+        
+        await update.message.reply_text(msg, parse_mode='Markdown', reply_markup=keyboard)
+        
+    except Exception as e:
+        logger.error(f"Teach panel error: {e}")
+        await update.message.reply_text("❌ Error loading TEACH panel!", reply_markup=super_admin_menu)
+
+async def teach_callback(update, context):
+    """Handle teach callbacks"""
+    try:
+        query = update.callback_query
+        await query.answer()
+        
+        uid = int(query.from_user.id)
+        
+        if uid not in SUPER_ADMIN_IDS:
+            await query.edit_message_text("❌ Only Super Admin can access TEACH!")
+            return
+        
+        data = query.data
+        
+        if data == "teach_refresh":
+            await query.answer("🔄 Refreshed!", show_alert=False)
+            # Rebuild message
+            current_total = len(HISTORICAL_RESULTS)
+            initial_count = ALGORITHM_STATS.get("initial_count", 0)
+            added_by_sa = ALGORITHM_STATS.get("added_by_super_admin", 0)
+            skipped = ALGORITHM_STATS.get("skipped_by_players", 0)
+            
+            if initial_count > 0:
+                improvement = ((current_total - initial_count) / initial_count) * 100
+            else:
+                improvement = 0
+            
+            daily_additions = ALGORITHM_STATS.get("daily_additions", {})
+            graph = build_bar_graph(daily_additions, max_days=7)
+            
+            new_numbers = ALGORITHM_STATS.get("new_numbers_history", [])[-10:]
+            
+            numbers_list = ""
+            if new_numbers:
+                for i, item in enumerate(reversed(new_numbers), 1):
+                    time_str = item.get("time", "")[11:16] if len(item.get("time", "")) >= 16 else ""
+                    numbers_list += f"├─ {i}. {item['number']} ({item['size']}) - {time_str}\n"
+            else:
+                numbers_list = "├─ No numbers added yet\n"
+            
+            if improvement >= 20:
+                status = "🔥 EXCELLENT"
+            elif improvement >= 10:
+                status = "💪 GOOD"
+            elif improvement >= 5:
+                status = "📈 IMPROVING"
+            else:
+                status = "🌱 STARTING"
+            
+            msg = f"""
+📚 *TEACH PANEL - ALGORITHM TRACKING*
+━━━━━━━━━━━━━━━━━━━━━━
+
+📊 *ALGORITHM NUMBERS STATISTICS*
+├─ 📈 Pehle Kitne The: {initial_count}
+├─ ✅ Ab Kitne Add Hue: {added_by_sa}
+├─ 🎯 Total Ab: {current_total}
+├─ ⏭️ Player Numbers Skipped: {skipped}
+└─ 🕐 Last Update: {ALGORITHM_STATS.get('last_updated', 'N/A')[:16]}
+
+━━━━━━━━━━━━━━━━━━━━━━
+📈 *GRAPH - LAST 7 DAYS*
+{graph}
+━━━━━━━━━━━━━━━━━━━━━━
+📊 *TOTAL ADDED: {added_by_sa} numbers*
+
+━━━━━━━━━━━━━━━━━━━━━━
+🔢 *NAYE NUMBERS (LAST 10)*
+{numbers_list}
+━━━━━━━━━━━━━━━━━━━━━━
+📊 *IMPROVEMENT TRACKING*
+├─ 📈 Pehle: {initial_count} numbers
+├─ ✅ Ab: {current_total} numbers
+├─ 🎯 Improvement: +{improvement:.1f}%
+└─ 💪 Status: {status}
+
+━━━━━━━━━━━━━━━━━━━━━━
+🧪 *ALGORITHM DETAILS*
+├─ 📊 Self-Learning: ✅ Active
+├─ 🔄 Pattern Recognition: ✅ Active
+├─ 🎯 Confidence Score: ✅ Active
+├─ 🔒 Period Lock: ✅ Active
+├─ ⚡ 3-Press Rule: ✅ Active
+└─ 👑 Super Admin Only Add: ✅ Active
+
+━━━━━━━━━━━━━━━━━━━━━━
+👑 *Super Admin:* @{query.from_user.username}
+🕐 *Report Time:* {datetime.now().strftime('%I:%M %p')}
+"""
+            
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔄 REFRESH", callback_data="teach_refresh")],
+                [InlineKeyboardButton("📊 DETAILED VIEW", callback_data="teach_detailed")]
+            ])
+            
+            await query.edit_message_text(msg, parse_mode='Markdown', reply_markup=keyboard)
+        
+        elif data == "teach_detailed":
+            current_total = len(HISTORICAL_RESULTS)
+            initial_count = ALGORITHM_STATS.get("initial_count", 0)
+            added_by_sa = ALGORITHM_STATS.get("added_by_super_admin", 0)
+            
+            # Last 20 numbers
+            all_new = ALGORITHM_STATS.get("new_numbers_history", [])
+            
+            msg = f"""
+📊 *DETAILED ALGORITHM VIEW*
+━━━━━━━━━━━━━━━━━━━━━━
+
+📈 *NUMBERS ADDED HISTORY (Last 20)*
+
+"""
+            if all_new:
+                for i, item in enumerate(reversed(all_new[-20:]), 1):
+                    time_str = item.get("time", "")[:16] if item.get("time") else ""
+                    msg += f"{i}. {item['number']} ({item['size']}) - {time_str}\n"
+            else:
+                msg += "No numbers added yet.\n"
+            
+            msg += f"""
+━━━━━━━━━━━━━━━━━━━━━━
+📊 *SUMMARY*
+├─ 📈 Initial: {initial_count}
+├─ ✅ Added by Super Admin: {added_by_sa}
+├─ 🎯 Current Total: {current_total}
+└─ 📊 Net Change: +{current_total - initial_count}
+
+━━━━━━━━━━━━━━━━━━━━━━
+💡 *Algorithm Version:* v12.0
+🕐 *Last Update:* {ALGORITHM_STATS.get('last_updated', 'N/A')[:16]}
+"""
+            
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅ BACK TO TEACH", callback_data="teach_back")]
+            ])
+            
+            await query.edit_message_text(msg, parse_mode='Markdown', reply_markup=keyboard)
+        
+        elif data == "teach_back":
+            await teach_panel_callback(update, context)
+        
+        else:
+            await query.edit_message_text("❌ Invalid option!", reply_markup=super_admin_menu)
+            
+    except Exception as e:
+        logger.error(f"Teach callback error: {e}")
+        await query.edit_message_text("❌ Error loading TEACH panel!")
+
+async def teach_panel_callback(update, context):
+    """Rebuild teach panel from callback"""
+    try:
+        query = update.callback_query
+        
+        current_total = len(HISTORICAL_RESULTS)
+        initial_count = ALGORITHM_STATS.get("initial_count", 0)
+        added_by_sa = ALGORITHM_STATS.get("added_by_super_admin", 0)
+        skipped = ALGORITHM_STATS.get("skipped_by_players", 0)
+        
+        if initial_count > 0:
+            improvement = ((current_total - initial_count) / initial_count) * 100
+        else:
+            improvement = 0
+        
+        daily_additions = ALGORITHM_STATS.get("daily_additions", {})
+        graph = build_bar_graph(daily_additions, max_days=7)
+        
+        new_numbers = ALGORITHM_STATS.get("new_numbers_history", [])[-10:]
+        
+        numbers_list = ""
+        if new_numbers:
+            for i, item in enumerate(reversed(new_numbers), 1):
+                time_str = item.get("time", "")[11:16] if len(item.get("time", "")) >= 16 else ""
+                numbers_list += f"├─ {i}. {item['number']} ({item['size']}) - {time_str}\n"
+        else:
+            numbers_list = "├─ No numbers added yet\n"
+        
+        if improvement >= 20:
+            status = "🔥 EXCELLENT"
+        elif improvement >= 10:
+            status = "💪 GOOD"
+        elif improvement >= 5:
+            status = "📈 IMPROVING"
+        else:
+            status = "🌱 STARTING"
+        
+        msg = f"""
+📚 *TEACH PANEL - ALGORITHM TRACKING*
+━━━━━━━━━━━━━━━━━━━━━━
+
+📊 *ALGORITHM NUMBERS STATISTICS*
+├─ 📈 Pehle Kitne The: {initial_count}
+├─ ✅ Ab Kitne Add Hue: {added_by_sa}
+├─ 🎯 Total Ab: {current_total}
+├─ ⏭️ Player Numbers Skipped: {skipped}
+└─ 🕐 Last Update: {ALGORITHM_STATS.get('last_updated', 'N/A')[:16]}
+
+━━━━━━━━━━━━━━━━━━━━━━
+📈 *GRAPH - LAST 7 DAYS*
+{graph}
+━━━━━━━━━━━━━━━━━━━━━━
+📊 *TOTAL ADDED: {added_by_sa} numbers*
+
+━━━━━━━━━━━━━━━━━━━━━━
+🔢 *NAYE NUMBERS (LAST 10)*
+{numbers_list}
+━━━━━━━━━━━━━━━━━━━━━━
+📊 *IMPROVEMENT TRACKING*
+├─ 📈 Pehle: {initial_count} numbers
+├─ ✅ Ab: {current_total} numbers
+├─ 🎯 Improvement: +{improvement:.1f}%
+└─ 💪 Status: {status}
+
+━━━━━━━━━━━━━━━━━━━━━━
+🧪 *ALGORITHM DETAILS*
+├─ 📊 Self-Learning: ✅ Active
+├─ 🔄 Pattern Recognition: ✅ Active
+├─ 🎯 Confidence Score: ✅ Active
+├─ 🔒 Period Lock: ✅ Active
+├─ ⚡ 3-Press Rule: ✅ Active
+└─ 👑 Super Admin Only Add: ✅ Active
+
+━━━━━━━━━━━━━━━━━━━━━━
+👑 *Super Admin:* @{query.from_user.username}
+🕐 *Report Time:* {datetime.now().strftime('%I:%M %p')}
+"""
+        
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔄 REFRESH", callback_data="teach_refresh")],
+            [InlineKeyboardButton("📊 DETAILED VIEW", callback_data="teach_detailed")]
+        ])
+        
+        await query.edit_message_text(msg, parse_mode='Markdown', reply_markup=keyboard)
+        
+    except Exception as e:
+        logger.error(f"Teach panel callback error: {e}")
+
+# ==========================================
 # ⭐ STUDY SYSTEM (SUPER ADMIN ONLY)
 # ==========================================
 
@@ -2387,7 +2703,7 @@ async def study_callback(update, context):
 🧪 *TECHNICAL DETAILS:*
 ├─ 📊 Self-Learning: ✅ Enabled
 ├─ 🔄 Pattern Recognition: ✅ Active
-├─ 📈 Historical Data: 200+ results
+├─ 📈 Historical Data: {len(HISTORICAL_RESULTS)} numbers
 ├─ 🎯 Confidence Scoring: ✅ Active
 ├─ 🔒 Period Lock: ✅ Active
 ├─ ⚡ 3-Press Rule: ✅ Active
@@ -2395,10 +2711,11 @@ async def study_callback(update, context):
 ├─ 🏅 Rare Achievement Display: ✅ Active
 ├─ ⏰ 30min Fake Players Add: ✅ Active
 ├─ 🏆 2 Achievements Display: ✅ Active
+├─ 👑 Super Admin Only Add: ✅ Active
 └─ 👥 100+ Concurrent Players: ✅ Active
 
 ━━━━━━━━━━━━━━━━━━━━━━
-💡 *Algorithm Version:* v11.0
+💡 *Algorithm Version:* v12.0
 🕐 *Last Updated:* {datetime.now().strftime('%Y-%m-%d %H:%M')}
 """
             
@@ -2414,10 +2731,10 @@ async def study_callback(update, context):
 ━━━━━━━━━━━━━━━━━━━━━━
 
 📌 *Latest Algorithm Added:*
-🔹 *v11.0 - Single Level System + 30min Fake Players + 2 Achievements*
+🔹 *v12.0 - Super Admin Play + Teach Button + Algorithm Tracking*
 
 📝 *Description:*
-Game Level hata diya. Sirf ek Level system. Win = Reset to 1, Loss = +1. Har 30 min par fake players add. Har player ko 2 achievements show.
+Sirf Super Admin ka number algorithm mein add hoga. Teach button se graph, numbers list, tracking sab dikhega. Sequence tracking bhi active.
 
 ━━━━━━━━━━━━━━━━━━━━━━
 📊 *PREVIOUS VERSIONS:*
@@ -2512,7 +2829,7 @@ Game Level hata diya. Sirf ek Level system. Win = Reset to 1, Loss = +1. Har 30 
         await query.edit_message_text("❌ Error loading study panel!")
 
 # ==========================================
-# ⭐ NEW PLAYERS STATS - FIXED
+# ⭐ NEW PLAYERS STATS
 # ==========================================
 
 async def new_players_stats(update, context):
@@ -2614,7 +2931,6 @@ async def new_players_stats(update, context):
 # ==========================================
 
 async def cancel_vip(update, context):
-    """Super Admin can cancel any player's VIP membership"""
     try:
         uid = int(update.effective_user.id)
         
@@ -2688,7 +3004,7 @@ async def cancel_vip(update, context):
         await update.message.reply_text("❌ Error cancelling VIP! Please check the user ID and try again.")
 
 # ==========================================
-# ⭐ DEVICE TRACKING - FIXED (WITH VIP CANCEL FOR SUPER ADMIN)
+# ⭐ DEVICE TRACKING
 # ==========================================
 
 async def device_tracking(update, context):
@@ -2926,10 +3242,6 @@ async def device_tracking_callback(update, context):
         logger.error(f"Device tracking callback error: {e}")
         await query.edit_message_text("❌ Error loading device tracking!", reply_markup=admin_menu)
 
-# ==========================================
-# ⭐ CANCEL VIP CALLBACK (SUPER ADMIN ONLY)
-# ==========================================
-
 async def cancel_vip_callback(update, context):
     try:
         query = update.callback_query
@@ -2958,8 +3270,6 @@ async def cancel_vip_callback(update, context):
         
         del vip[target_uid]
         await safe_save_json("vip.json", vip)
-        
-        logger.info(f"✅ Super Admin {uid} cancelled VIP for user {target_uid} via device tracking")
         
         try:
             await context.bot.send_message(
@@ -3073,7 +3383,7 @@ async def start_button(update, context):
             if uid in users:
                 users[uid]['win_count'] = 0
                 users[uid]['loss_count'] = 0
-                users[uid]['level'] = 1  # Reset to 1
+                users[uid]['level'] = 1
                 await safe_save_json("users.json", users)
         
         await send_typing(context, update.effective_chat.id)
@@ -3151,7 +3461,6 @@ async def handle_photo(update, context):
         pay[req] = {"id": req, "uid": uid, "name": user_name, "photo": photo, "time": str(datetime.now()), "status": "pending"}
         await safe_save_json("pay.json", pay)
         
-        admin_sent = False
         for admin_id in ADMIN_IDS:
             try:
                 await context.bot.send_photo(
@@ -3160,7 +3469,6 @@ async def handle_photo(update, context):
                     caption=f"""🔔 NEW PAYMENT REQUEST!\n━━━━━━━━━━━━━━━━━━━━━━\n📋 ID: {req}\n👤 User: @{user_name}\n🆔 UID: {uid}\n💰 Amount: ₹299\n🕐 Time: {datetime.now().strftime('%Y-%m-%d %H:%M')}""",
                     reply_markup=get_admin_buttons(req)
                 )
-                admin_sent = True
             except Exception as e:
                 logger.error(f"Error sending to admin: {e}")
         
@@ -3172,7 +3480,7 @@ async def handle_photo(update, context):
         await update.message.reply_text("❌ Error uploading! Please try again.", reply_markup=main_menu)
 
 # ==========================================
-# ⭐ CALLBACK HANDLER - FIXED
+# ⭐ CALLBACK HANDLER
 # ==========================================
 
 async def callback(update, context):
@@ -3188,6 +3496,10 @@ async def callback(update, context):
         
         if data.startswith("study_"):
             await study_callback(update, context)
+            return
+        
+        if data.startswith("teach_"):
+            await teach_callback(update, context)
             return
         
         if data.startswith("app_"):
@@ -3220,12 +3532,18 @@ async def callback(update, context):
             await device_tracking_callback(update, context)
         elif data == "track_back":
             await device_tracking_callback(update, context)
+        elif data == "teach_refresh":
+            await teach_callback(update, context)
+        elif data == "teach_detailed":
+            await teach_callback(update, context)
+        elif data == "teach_back":
+            await teach_panel_callback(update, context)
             
     except Exception as e:
         logger.error(f"Callback error: {e}")
 
 # ==========================================
-# ⭐ ACHIEVEMENT SELECTION SYSTEM - UPDATED WITH DONE BUTTON
+# ⭐ ACHIEVEMENT SELECTION
 # ==========================================
 
 async def view_achievements_callback(update, context):
@@ -3312,9 +3630,6 @@ async def select_achievement_callback(update, context):
         users[uid]['selected_achievement'] = ach_name
         users[uid]['selected_achievement_saved'] = False
         await safe_save_json("users.json", users)
-        
-        rarity = ACHIEVEMENTS.get(ach_name, {}).get('rarity', 'common')
-        emoji = get_rarity_emoji(rarity)
         
         await view_achievements_callback(update, context)
         
@@ -3553,7 +3868,6 @@ async def leaderboard(update, context):
    📊 {total} Plays • Level {level} {arrow}
 """
             
-            # ✅ 2 ACHIEVEMENTS LOGIC
             achievements_to_show = []
             
             if has_saved_selection and selected and selected in unlocked:
@@ -3676,10 +3990,6 @@ async def leaderboard(update, context):
     except Exception as e:
         logger.error(f"Leaderboard error: {e}")
         await update.message.reply_text("❌ Error loading leaderboard!", reply_markup=main_menu)
-
-# ==========================================
-# ⭐ PROFILE HISTORY - UPDATED
-# ==========================================
 
 async def profile_history_callback(update, context):
     try:
@@ -3842,9 +4152,6 @@ async def back_home_callback(update, context):
     except Exception as e:
         logger.error(f"Back home callback error: {e}")
 
-# ==========================================
-# ⭐ PROFILE COMMAND - UPDATED
-# ==========================================
 async def profile(update, context):
     try:
         uid = str(update.effective_user.id)
@@ -3978,7 +4285,7 @@ async def profile(update, context):
         await update.message.reply_text("❌ Error loading profile!", reply_markup=main_menu)
 
 # ==========================================
-# ⭐ REMAINING FUNCTIONS (UNCHANGED - KEEP AS IS)
+# ⭐ PAYMENT FUNCTIONS
 # ==========================================
 
 async def approve_payment(query, context, req_id):
@@ -4293,7 +4600,7 @@ async def broadcast(update, context):
         await update.message.reply_text("❌ Error! Please try again.", reply_markup=admin_menu)
 
 # ==========================================
-# ALL OTHER FUNCTIONS (UNCHANGED - KEEP AS IS)
+# ⭐ APPROVAL LOG
 # ==========================================
 
 async def approval_log(update, context):
@@ -4400,6 +4707,10 @@ async def admin_activity(update, context):
         logger.error(f"Admin activity error: {e}")
         await update.message.reply_text("❌ Error loading admin activity!", reply_markup=super_admin_menu)
 
+# ==========================================
+# ⭐ ACHIEVEMENTS COMMAND
+# ==========================================
+
 async def achievements(update, context):
     try:
         uid = str(update.effective_user.id)
@@ -4410,8 +4721,6 @@ async def achievements(update, context):
         loss = user.get('loss_count', 0)
         level = user.get('level', 1)
         total_plays = win + loss
-        
-        progress = get_rank_progress(total_plays)
         
         vip = safe_load_json("vip.json")
         is_vip = False
@@ -4492,6 +4801,10 @@ async def achievements(update, context):
     except Exception as e:
         logger.error(f"Achievements error: {e}")
         await update.message.reply_text("❌ Error loading achievements!", reply_markup=profile_menu)
+
+# ==========================================
+# ⭐ RANK COMMAND
+# ==========================================
 
 async def rank_command(update, context):
     try:
@@ -4684,6 +4997,10 @@ async def rank_command(update, context):
     except Exception as e:
         logger.error(f"Rank command error: {e}")
         await update.message.reply_text("❌ Error loading rank!", reply_markup=main_menu)
+
+# ==========================================
+# ⭐ TRACK USER
+# ==========================================
 
 async def track_user(update, context):
     try:
@@ -4950,6 +5267,36 @@ async def play(update, context):
         logger.error(f"Play error: {e}")
         await update.message.reply_text("❌ Error! Please try again.", reply_markup=main_menu)
 
+# ✅ NEW: SUPER ADMIN PLAY FUNCTION
+async def super_admin_play(update, context):
+    """Super Admin Play - Number instantly added to algorithm"""
+    try:
+        uid = str(update.effective_user.id)
+        
+        if uid not in SUPER_ADMIN_IDS_STR:
+            await update.message.reply_text("❌ Only Super Admin can access this!")
+            return
+        
+        context.user_data.clear()
+        context.user_data['super_admin_play'] = True
+        context.user_data['waiting_result_number'] = True
+        
+        banner = get_result_banner()
+        await update.message.reply_text(
+            f"""👑 *SUPER ADMIN PLAY MODE*
+━━━━━━━━━━━━━━━━━━━━━━
+⚠️ *Aapka number INSTANTLY algorithm mein add hoga!*
+━━━━━━━━━━━━━━━━━━━━━━
+
+{banner}""",
+            parse_mode='Markdown',
+            reply_markup=super_admin_play_menu
+        )
+        
+    except Exception as e:
+        logger.error(f"Super Admin Play error: {e}")
+        await update.message.reply_text("❌ Error! Please try again.", reply_markup=super_admin_menu)
+
 async def verify_passkey(update, context):
     try:
         uid = str(update.effective_user.id)
@@ -5112,12 +5459,22 @@ async def handle_result_number(update, context):
             algo_prediction = predict_next_with_history()
             context.user_data['algo_prediction'] = algo_prediction
             
-            logger.info(f"🔮 Algorithm: {user_num} → {algo_prediction['prediction']} ({algo_prediction['number']})")
+            # ✅ CHECK: Super Admin hai ya nahi
+            is_super_admin = uid in SUPER_ADMIN_IDS_STR
+            
+            if is_super_admin:
+                # ✅ Super Admin ka number INSTANTLY algorithm mein add hoga
+                added = add_result_to_history(user_num, is_super_admin=True)
+                logger.info(f"👑 Super Admin number added to algorithm: {user_num} (added={added})")
+                
+                # ✅ Sequence bhi save hoga (next number tracking)
+                # Already add_result_to_history mein handle ho raha hai
+            else:
+                # ❌ Normal player ka number algorithm mein add NAHI hoga
+                add_result_to_history(user_num, is_super_admin=False)
+                logger.info(f"⚠️ Normal player number skipped: {user_num}")
             
             save_result(uid, period, user_num, result_trend)
-            add_result_to_history(user_num)
-            
-            logger.info(f"✅ Added {user_num} to history! Total: {len(HISTORICAL_RESULTS)}")
             
             if period not in GLOBAL_PERIOD_RESULTS:
                 GLOBAL_PERIOD_RESULTS[period] = {
@@ -5126,16 +5483,27 @@ async def handle_result_number(update, context):
                     "trend": result_trend, 
                     "category": result_category
                 }
-                logger.info(f"✅ Stored GLOBAL result for period {period}: {user_num} ({result_trend})")
-            else:
-                logger.info(f"⚠️ Period {period} ALREADY exists in GLOBAL! Using existing: {GLOBAL_PERIOD_RESULTS[period]['num1']}")
             
             context.user_data['waiting_result_number'] = False
+            context.user_data.pop('super_admin_play', None)
             
-            await update.message.reply_text(
-                f"✅ Result Saved!\n📊 {user_num}\n📈 {result_category}\n🔢 {period}",
-                reply_markup=ReplyKeyboardRemove()
-            )
+            # ✅ Super Admin ko special message
+            if is_super_admin:
+                await update.message.reply_text(
+                    f"""👑 *SUPER ADMIN - Number Added!*
+━━━━━━━━━━━━━━━━━━━━━━
+✅ Number: *{user_num}*
+📈 Category: {result_category}
+🔢 Period: {period}
+🤖 Algorithm: ✅ Instantly Added
+━━━━━━━━━━━━━━━━━━━━━━""",
+                    parse_mode='Markdown'
+                )
+            else:
+                await update.message.reply_text(
+                    f"✅ Result Saved!\n📊 {user_num}\n📈 {result_category}\n🔢 {period}",
+                    reply_markup=ReplyKeyboardRemove()
+                )
             
             await process_analysis(update, context, uid, None, period)
             return
@@ -5171,8 +5539,6 @@ async def process_analysis(update, context, uid, periods=None, last_period=None)
         num2 = global_result["num2"]
         trend = global_result["trend"]
         category = global_result["category"]
-        
-        logger.info(f"✅ Using GLOBAL result for period {current_period}: {num1}, {num2} ({trend})")
         
         users = safe_load_json("users.json")
         users[uid]['last_period'] = current_period
@@ -5218,7 +5584,6 @@ async def handle_result(update, context):
             await update.message.reply_text("⏱ SELECT TIME", reply_markup=timer_menu)
             return
         
-        # ✅ ONLY NUMBER BUTTONS (BIG/SMALL REMOVED)
         if text in ["0️⃣","1️⃣","2️⃣","3️⃣","4️⃣","5️⃣","6️⃣","7️⃣","8️⃣","9️⃣"]:
             loading_msg = await update.message.reply_text("⏳ Processing...")
             await asyncio.sleep(0.2)
@@ -5247,6 +5612,18 @@ async def handle_result(update, context):
             else:
                 win = False
                 result_text = "💪 KEEP GOING!"
+            
+            # ✅ CHECK: Super Admin hai ya nahi
+            is_super_admin = uid in SUPER_ADMIN_IDS_STR
+            
+            if is_super_admin:
+                # ✅ Super Admin ka number INSTANTLY algorithm mein add hoga
+                add_result_to_history(user_num, is_super_admin=True)
+                logger.info(f"👑 Super Admin number added: {user_num}")
+            else:
+                # ❌ Normal player ka number add NAHI hoga
+                add_result_to_history(user_num, is_super_admin=False)
+                logger.info(f"⚠️ Normal player number skipped: {user_num}")
             
             async with get_user_lock(uid):
                 users = safe_load_json("users.json")
@@ -5416,8 +5793,6 @@ async def handle_result(update, context):
                     "trend": next_trend,
                     "category": next_category
                 }
-            else:
-                logger.info(f"⚠️ Period {next_period} ALREADY exists! Using existing result.")
             
             users = safe_load_json("users.json")
             
@@ -5655,6 +6030,24 @@ async def handle_buttons(update, context):
             users[uid] = {"id": uid, "name": update.effective_user.username or "Unknown", "joined": str(datetime.now()), "win_count": 0, "loss_count": 0, "level": 1, "rank_level": 0, "previous_rank": None, "device_id": device_info["device_id"], "ip_address": device_info["ip_address"], "free_trial_used": False, "free_trial_expiry": None, "username": device_info["username"], "first_name": device_info["first_name"], "last_name": device_info["last_name"], "language_code": device_info["language_code"], "achievements": {"unlocked": []}}
             await safe_save_json("users.json", users)
             logger.info(f"✅ New user created: {uid}")
+        
+        # ✅ SUPER ADMIN PLAY BUTTON
+        if text == "▶️ SUPER ADMIN PLAY":
+            user_id_int = int(uid)
+            if user_id_int in SUPER_ADMIN_IDS:
+                await super_admin_play(update, context)
+            else:
+                await update.message.reply_text("❌ Only Super Admin!", reply_markup=main_menu)
+            return
+        
+        # ✅ TEACH BUTTON
+        if text == "📚 TEACH":
+            user_id_int = int(uid)
+            if user_id_int in SUPER_ADMIN_IDS:
+                await teach_panel(update, context)
+            else:
+                await update.message.reply_text("❌ Only Super Admin!", reply_markup=main_menu)
+            return
         
         if text == "⬅ BACK TO PROFILE" or text == "🔙 BACK":
             context.user_data.clear()
@@ -5979,6 +6372,7 @@ def main():
     app.add_handler(CommandHandler("newplayers", new_players_stats))
     app.add_handler(CommandHandler("cancelvip", cancel_vip))
     app.add_handler(CommandHandler("study", study_panel))
+    app.add_handler(CommandHandler("teach", teach_panel))
     app.add_handler(CallbackQueryHandler(callback))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_buttons))
@@ -6000,12 +6394,6 @@ def main():
         logger.error(f"Failed to start dynamic top 3: {e}")
     
     try:
-        start_daily_random_players()
-    except Exception as e:
-        logger.error(f"Failed to start daily random players: {e}")
-    
-    # ✅ 30 MINUTES FAKE PLAYERS ADD
-    try:
         start_fake_players_30min()
     except Exception as e:
         logger.error(f"Failed to start 30min fake players: {e}")
@@ -6014,7 +6402,7 @@ def main():
     thread.start()
     print("✅ Health check server running on port 10000!")
     print("=" * 50)
-    print("🌟 AURA BOT v11.0 STARTED!")
+    print("🌟 AURA BOT v12.0 STARTED!")
     print("=" * 50)
     print("✅ Bot is running!")
     print(f"👑 Super Admin: {SUPER_ADMIN_IDS}")
@@ -6043,7 +6431,6 @@ def main():
     print("⏰ 30MIN FAKE PLAYERS: ENABLED (Har 30 min par add)")
     print("⏰ Auto-Play Increase: ENABLED (Every hour)")
     print("🔄 Dynamic Top 3: ENABLED (Every 2-4 hours)")
-    print("📅 Daily Random Players: ENABLED (2-3 players daily)")
     print("🎮 PLAY Button: MOVED TO BOTTOM (BIGGER)")
     print("📋 FULL RANK CHART: ENABLED (BEGINNER to GOD TIER)")
     print("🔒 CONCURRENT PLAYERS: ENABLED (100+ players simultaneously)")
@@ -6054,9 +6441,8 @@ def main():
     print("👑 ULTIMATE ACHIEVEMENT SYSTEM: ENABLED (Titles, Milestones, Completionist)")
     print("📜 COMPLETE HISTORY: ENABLED (Dopamine Hit Stats)")
     print("✅ SELECT ACHIEVEMENT WITH DONE BUTTON: ENABLED")
-    print("✅ 2 ACHIEVEMENTS PER PLAYER: ENABLED (Selected+1 random ya AI 2 random)")
+    print("✅ 2 ACHIEVEMENTS PER PLAYER: ENABLED")
     print("✅ DOPAMINE HIT EMOJIS: 5 WIN + 5 LOSS Variations (3s Auto-Delete)")
-    print("✅ CHAIN PATTERN ALGORITHM: REMOVED (Only BIG/SMALL Analysis)")
     print("✅ VIP EXPIRE PAR DATA DELETE NAHI HOTA")
     print("✅ BOT RESTART PAR DATA SAFE RAHEGA")
     print("✅ 100+ PLAYERS EK SAATH FAST")
@@ -6065,8 +6451,11 @@ def main():
     print("✅ LEADERBOARD FIXED")
     print("✅ STUDY PANEL: ENABLED (Super Admin Only)")
     print("✅ BIG/SMALL BUTTONS: REMOVED (Only Numbers)")
-    print("✅ 100+ CONCURRENT PLAYERS: ENABLED (Optimized Locking)")
+    print("✅ 100+ CONCURRENT PLAYERS: ENABLED")
     print("✅ GAME LEVEL: REMOVED (Single Level System)")
+    print("👑 SUPER ADMIN PLAY: ENABLED (Sirf SA ka number add hoga)")
+    print("📚 TEACH PANEL: ENABLED (Graph + Numbers List + Tracking)")
+    print("📊 ALGORITHM TRACKING: ENABLED (Instant Add for SA)")
     print("✅ ALL ERRORS FIXED")
     print("=" * 50)
     app.run_polling()
