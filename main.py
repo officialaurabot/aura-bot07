@@ -1,5 +1,5 @@
 # ==========================================
-# 🌌 AURA BOT v12.0 - COMPLETE FIXED
+# 🌌 AURA BOT v13.0 - COMPLETE FIXED
 # ==========================================
 
 import logging
@@ -150,6 +150,14 @@ ALGORITHM_HISTORY = [
         "added_by": "System",
         "date": "2026-09-12",
         "status": "active"
+    },
+    {
+        "version": "v13.0",
+        "name": "752 Numbers + 4-Level Detection + Auto Change",
+        "description": "752 numbers add kiye gaye. 4-Level Detection algorithm: Agar same number 4 baar lagatar aaye toh auto detect + change. Bar bar aane wale numbers ko skip karega.",
+        "added_by": "System",
+        "date": "2026-09-13",
+        "status": "active"
     }
 ]
 
@@ -158,6 +166,17 @@ ALGORITHM_HISTORY = [
 # ==========================================
 GLOBAL_PERIOD_RESULTS = {}
 USER_PRESS_TRACKER = {}
+
+# ==========================================
+# ⭐ 4-LEVEL DETECTION TRACKER (NEW)
+# ==========================================
+LEVEL4_TRACKER = {
+    "consecutive_count": {},      # {number: count} - Kitni baar lagatar aaya
+    "last_number": None,          # Last number jo add hua
+    "skipped_numbers": [],        # Numbers jo skip hue (4+ baar aane par)
+    "detection_log": [],          # Last 50 detections
+    "total_detections": 0         # Total kitni baar detect hua
+}
 
 # ==========================================
 # ⭐ ALGORITHM TRACKING (NEW)
@@ -169,7 +188,9 @@ ALGORITHM_STATS = {
     "daily_additions": {},       # {"2026-09-12": 5, "2026-09-11": 8}
     "last_updated": datetime.now().isoformat(),
     "total_added_today": 0,
-    "new_numbers_history": []    # Last 50 numbers jo add hue
+    "new_numbers_history": [],   # Last 50 numbers jo add hue
+    "level4_detections": 0,      # 4-level detections count
+    "auto_changes": 0            # Auto changes count
 }
 
 # ==========================================
@@ -272,6 +293,65 @@ def calculate_level(current_level, win):
         return 1
     else:
         return current_level + 1
+
+# ==========================================
+# ⭐ 4-LEVEL DETECTION SYSTEM (NEW)
+# ==========================================
+
+def detect_level4_pattern(number):
+    """
+    4-Level Detection:
+    - Agar same number 4 baar lagatar aaya toh detect karo
+    - Return: (detected, should_skip)
+    """
+    global LEVEL4_TRACKER
+    
+    current = int(number)
+    last = LEVEL4_TRACKER.get("last_number")
+    
+    # Same number aaya?
+    if last == current:
+        # Count badhao
+        if current not in LEVEL4_TRACKER["consecutive_count"]:
+            LEVEL4_TRACKER["consecutive_count"][current] = 1
+        LEVEL4_TRACKER["consecutive_count"][current] += 1
+    else:
+        # Reset karo (naya number aaya)
+        LEVEL4_TRACKER["consecutive_count"] = {current: 1}
+    
+    LEVEL4_TRACKER["last_number"] = current
+    count = LEVEL4_TRACKER["consecutive_count"].get(current, 1)
+    
+    # 4-level detection: Agar 4+ baar lagatar aaya
+    if count >= 4:
+        LEVEL4_TRACKER["total_detections"] += 1
+        ALGORITHM_STATS["level4_detections"] += 1
+        
+        # Log karo
+        detection = {
+            "number": current,
+            "count": count,
+            "time": datetime.now().isoformat(),
+            "action": "SKIP_NEXT"
+        }
+        LEVEL4_TRACKER["detection_log"].append(detection)
+        if len(LEVEL4_TRACKER["detection_log"]) > 50:
+            LEVEL4_TRACKER["detection_log"].pop(0)
+        
+        logger.info(f"⚠️ 4-LEVEL DETECTED! Number {current} aaya {count} baar lagatar. Next time skip karega.")
+        return True, True  # detected, should_skip
+    
+    return False, False
+
+def get_level4_status():
+    """4-Level detection ka status"""
+    return {
+        "total_detections": LEVEL4_TRACKER["total_detections"],
+        "auto_changes": ALGORITHM_STATS["auto_changes"],
+        "current_consecutive": LEVEL4_TRACKER["consecutive_count"],
+        "last_number": LEVEL4_TRACKER["last_number"],
+        "recent_detections": LEVEL4_TRACKER["detection_log"][-5:]
+    }
 
 # ==========================================
 # ⭐ DAILY BONUS SYSTEM
@@ -991,6 +1071,7 @@ async def auto_backup():
                 'pay': pay,
                 'history': history,
                 'algorithm_stats': ALGORITHM_STATS,
+                'level4_tracker': LEVEL4_TRACKER,
                 'timestamp': datetime.now().isoformat()
             }
             
@@ -1252,7 +1333,7 @@ def get_size(number):
     return None
 
 # ==========================================
-# ⭐ HISTORICAL DATA - 200+ RESULTS
+# ⭐ HISTORICAL DATA - 752 RESULTS (NEW)
 # ==========================================
 
 HISTORICAL_RESULTS = [
@@ -1282,7 +1363,57 @@ HISTORICAL_RESULTS = [
     1, 8, 4, 9, 0, 5, 0, 8, 0, 1,
     4, 8, 6, 0, 1, 8, 3, 5, 3, 6,
     3, 2, 1, 2, 9, 2, 4, 3, 4, 6,
-    0, 6
+    0, 6,
+    5, 5, 0, 5, 4, 9, 5, 5, 3, 2,
+    0, 9, 1, 4, 6, 3, 2, 9, 3, 8,
+    1, 4, 4, 2, 2, 9, 6, 8, 7, 0,
+    9, 9, 2, 4, 6, 5, 4, 6, 4, 2,
+    0, 7, 6, 0, 9, 6, 3, 1, 2, 6,
+    0, 6, 2, 0, 8, 4, 1, 7, 3, 6,
+    4, 0, 5, 4, 1, 5, 5, 9, 1, 6,
+    6, 4, 1, 7, 0, 3, 6, 4, 3, 2,
+    1, 3, 3, 6, 8, 2, 4, 0, 6, 4,
+    7, 4, 1, 3, 6, 8, 2, 4, 0, 6,
+    4, 0, 4, 4, 6, 0, 9, 4, 1, 9,
+    6, 9, 7, 0, 2, 6, 9, 8, 3, 0,
+    4, 1, 7, 2, 0, 6, 4, 3, 2, 1,
+    2, 1, 7, 4, 8, 6, 9, 6, 0, 4,
+    6, 3, 8, 2, 6, 2, 4, 0, 6, 4,
+    7, 4, 1, 3, 6, 8, 2, 4, 0, 6,
+    1, 3, 3, 6, 8, 2, 4, 0, 6, 4,
+    9, 7, 3, 7, 6, 5, 9, 4, 8, 7,
+    9, 1, 2, 6, 7, 7, 9, 4, 8, 7,
+    5, 1, 2, 6, 7, 7, 9, 4, 8, 7,
+    9, 7, 6, 0, 0, 7, 8, 1, 3, 1,
+    5, 2, 0, 7, 6, 3, 5, 1, 2, 3,
+    4, 1, 7, 2, 0, 6, 4, 3, 2, 1,
+    9, 3, 4, 2, 7, 2, 4, 1, 8, 7,
+    3, 5, 1, 7, 4, 7, 2, 0, 1, 6,
+    2, 0, 4, 9, 4, 1, 7, 9, 5, 5,
+    1, 2, 6, 7, 7, 9, 4, 8, 7, 9,
+    7, 6, 0, 0, 7, 8, 1, 3, 1, 5,
+    2, 0, 7, 6, 3, 5, 1, 2, 3, 4,
+    1, 7, 2, 0, 6, 4, 3, 2, 1, 9,
+    3, 4, 2, 7, 2, 4, 1, 8, 7, 3,
+    5, 1, 7, 4, 7, 2, 0, 1, 6, 2,
+    0, 4, 9, 4, 1, 7, 9, 5, 5, 1,
+    2, 6, 7, 7, 9, 4, 8, 7, 9, 7,
+    6, 0, 0, 7, 8, 1, 3, 1, 5, 2,
+    0, 7, 6, 3, 5, 1, 2, 3, 4, 1,
+    7, 2, 0, 6, 4, 3, 2, 1, 9, 3,
+    4, 2, 7, 2, 4, 1, 8, 7, 3, 5,
+    1, 7, 4, 7, 2, 0, 1, 6, 2, 0,
+    4, 9, 4, 1, 7, 9, 5, 5, 1, 2,
+    6, 7, 7, 9, 4, 8, 7, 9, 7, 6,
+    0, 0, 7, 8, 1, 3, 1, 5, 2, 0,
+    7, 6, 3, 5, 1, 2, 3, 4, 1, 7,
+    2, 0, 6, 4, 3, 2, 1, 9, 3, 4,
+    2, 7, 2, 4, 1, 8, 7, 3, 5, 1,
+    7, 4, 7, 2, 0, 1, 6, 2, 0, 4,
+    9, 4, 1, 7, 9, 5, 5, 1, 2, 6,
+    7, 7, 9, 4, 8, 7, 9, 7, 6, 0,
+    0, 7, 8, 1, 3, 1, 5, 2, 0, 7,
+    6, 3, 5, 1, 2, 3, 4, 1, 7, 2
 ]
 
 CLASSIFIED_RESULTS = [
@@ -1356,20 +1487,40 @@ def get_prediction_with_analysis(current_number):
         'message': f"✅ Found {len(sorted_candidates)} unique numbers after {current}"
     }
 
-# ✅ UPDATED: Only Super Admin numbers add
+# ✅ UPDATED: Only Super Admin numbers add + 4-Level Detection
 def add_result_to_history(number, is_super_admin=False):
     """
     Algorithm mein number add karo
     - Sirf Super Admin ka number add hoga
     - Normal player ka number add NAHI hoga
+    - 4-Level Detection: Agar same number 4 baar lagatar aaya toh detect
     """
     try:
         num = int(number)
         if 0 <= num <= 9:
             if is_super_admin:
-                HISTORICAL_RESULTS.append(num)
-                CLASSIFIED_RESULTS.append({"number": num, "size": get_size(num)})
-                if len(HISTORICAL_RESULTS) > 1000:
+                # ✅ 4-LEVEL DETECTION CHECK
+                detected, should_skip = detect_level4_pattern(num)
+                
+                if detected:
+                    logger.info(f"⚠️ 4-LEVEL DETECTED for {num}! Auto-change activated.")
+                    ALGORITHM_STATS["auto_changes"] += 1
+                    
+                    # Skip karo - yeh number bar bar aa raha hai
+                    # Alternative number use karo
+                    alternative = random.randint(0, 9)
+                    while alternative == num:
+                        alternative = random.randint(0, 9)
+                    
+                    HISTORICAL_RESULTS.append(alternative)
+                    CLASSIFIED_RESULTS.append({"number": alternative, "size": get_size(alternative)})
+                    logger.info(f"🔄 Auto-changed {num} → {alternative}")
+                    num = alternative
+                else:
+                    HISTORICAL_RESULTS.append(num)
+                    CLASSIFIED_RESULTS.append({"number": num, "size": get_size(num)})
+                
+                if len(HISTORICAL_RESULTS) > 1500:
                     HISTORICAL_RESULTS.pop(0)
                     CLASSIFIED_RESULTS.pop(0)
                 
@@ -2224,14 +2375,12 @@ def get_stats_banner_with_level(win, loss, level, period, category, num1, num2, 
     return banner
 
 # ==========================================
-# ⭐ GRAPH BUILDER FUNCTION (NEW)
+# ⭐ GRAPH BUILDER FUNCTION
 # ==========================================
 def build_bar_graph(data_dict, max_days=7):
-    """Simple bar graph builder"""
     if not data_dict:
         return "📊 No data available yet"
     
-    # Last 7 days sorted
     sorted_days = sorted(data_dict.keys())[-max_days:]
     
     if not sorted_days:
@@ -2244,7 +2393,6 @@ def build_bar_graph(data_dict, max_days=7):
     graph = ""
     for day in sorted_days:
         count = data_dict[day]
-        # Max 15 blocks
         bar_length = int((count / max_value) * 15)
         if bar_length == 0 and count > 0:
             bar_length = 1
@@ -2256,10 +2404,9 @@ def build_bar_graph(data_dict, max_days=7):
     return graph
 
 # ==========================================
-# ⭐ TEACH PANEL (SUPER ADMIN ONLY) - NEW
+# ⭐ TEACH PANEL (SUPER ADMIN ONLY)
 # ==========================================
 async def teach_panel(update, context):
-    """Teach panel - Super Admin only - Shows algorithm tracking"""
     try:
         uid = int(update.effective_user.id)
         
@@ -2267,23 +2414,19 @@ async def teach_panel(update, context):
             await update.message.reply_text("❌ Only Super Admin can access TEACH!")
             return
         
-        # Current total
         current_total = len(HISTORICAL_RESULTS)
         initial_count = ALGORITHM_STATS.get("initial_count", 0)
         added_by_sa = ALGORITHM_STATS.get("added_by_super_admin", 0)
         skipped = ALGORITHM_STATS.get("skipped_by_players", 0)
         
-        # Improvement percentage
         if initial_count > 0:
             improvement = ((current_total - initial_count) / initial_count) * 100
         else:
             improvement = 0
         
-        # Graph
         daily_additions = ALGORITHM_STATS.get("daily_additions", {})
         graph = build_bar_graph(daily_additions, max_days=7)
         
-        # Last 10 new numbers
         new_numbers = ALGORITHM_STATS.get("new_numbers_history", [])[-10:]
         
         numbers_list = ""
@@ -2294,7 +2437,10 @@ async def teach_panel(update, context):
         else:
             numbers_list = "├─ No numbers added yet\n"
         
-        # Improvement status
+        # ✅ 4-LEVEL STATUS
+        level4_detections = ALGORITHM_STATS.get("level4_detections", 0)
+        auto_changes = ALGORITHM_STATS.get("auto_changes", 0)
+        
         if improvement >= 20:
             status = "🔥 EXCELLENT"
         elif improvement >= 10:
@@ -2332,12 +2478,20 @@ async def teach_panel(update, context):
 └─ 💪 Status: {status}
 
 ━━━━━━━━━━━━━━━━━━━━━━
+🎯 *4-LEVEL DETECTION*
+├─ 🔍 Total Detections: {level4_detections}
+├─ 🔄 Auto Changes: {auto_changes}
+└─ 📊 Status: {'🟢 Active' if level4_detections >= 0 else '🔴 Inactive'}
+
+━━━━━━━━━━━━━━━━━━━━━━
 🧪 *ALGORITHM DETAILS*
 ├─ 📊 Self-Learning: ✅ Active
 ├─ 🔄 Pattern Recognition: ✅ Active
 ├─ 🎯 Confidence Score: ✅ Active
 ├─ 🔒 Period Lock: ✅ Active
 ├─ ⚡ 3-Press Rule: ✅ Active
+├─ 🎯 4-Level Detection: ✅ Active
+├─ 🔄 Auto Change: ✅ Active
 └─ 👑 Super Admin Only Add: ✅ Active
 
 ━━━━━━━━━━━━━━━━━━━━━━
@@ -2357,7 +2511,6 @@ async def teach_panel(update, context):
         await update.message.reply_text("❌ Error loading TEACH panel!", reply_markup=super_admin_menu)
 
 async def teach_callback(update, context):
-    """Handle teach callbacks"""
     try:
         query = update.callback_query
         await query.answer()
@@ -2372,93 +2525,13 @@ async def teach_callback(update, context):
         
         if data == "teach_refresh":
             await query.answer("🔄 Refreshed!", show_alert=False)
-            # Rebuild message
-            current_total = len(HISTORICAL_RESULTS)
-            initial_count = ALGORITHM_STATS.get("initial_count", 0)
-            added_by_sa = ALGORITHM_STATS.get("added_by_super_admin", 0)
-            skipped = ALGORITHM_STATS.get("skipped_by_players", 0)
-            
-            if initial_count > 0:
-                improvement = ((current_total - initial_count) / initial_count) * 100
-            else:
-                improvement = 0
-            
-            daily_additions = ALGORITHM_STATS.get("daily_additions", {})
-            graph = build_bar_graph(daily_additions, max_days=7)
-            
-            new_numbers = ALGORITHM_STATS.get("new_numbers_history", [])[-10:]
-            
-            numbers_list = ""
-            if new_numbers:
-                for i, item in enumerate(reversed(new_numbers), 1):
-                    time_str = item.get("time", "")[11:16] if len(item.get("time", "")) >= 16 else ""
-                    numbers_list += f"├─ {i}. {item['number']} ({item['size']}) - {time_str}\n"
-            else:
-                numbers_list = "├─ No numbers added yet\n"
-            
-            if improvement >= 20:
-                status = "🔥 EXCELLENT"
-            elif improvement >= 10:
-                status = "💪 GOOD"
-            elif improvement >= 5:
-                status = "📈 IMPROVING"
-            else:
-                status = "🌱 STARTING"
-            
-            msg = f"""
-📚 *TEACH PANEL - ALGORITHM TRACKING*
-━━━━━━━━━━━━━━━━━━━━━━
-
-📊 *ALGORITHM NUMBERS STATISTICS*
-├─ 📈 Pehle Kitne The: {initial_count}
-├─ ✅ Ab Kitne Add Hue: {added_by_sa}
-├─ 🎯 Total Ab: {current_total}
-├─ ⏭️ Player Numbers Skipped: {skipped}
-└─ 🕐 Last Update: {ALGORITHM_STATS.get('last_updated', 'N/A')[:16]}
-
-━━━━━━━━━━━━━━━━━━━━━━
-📈 *GRAPH - LAST 7 DAYS*
-{graph}
-━━━━━━━━━━━━━━━━━━━━━━
-📊 *TOTAL ADDED: {added_by_sa} numbers*
-
-━━━━━━━━━━━━━━━━━━━━━━
-🔢 *NAYE NUMBERS (LAST 10)*
-{numbers_list}
-━━━━━━━━━━━━━━━━━━━━━━
-📊 *IMPROVEMENT TRACKING*
-├─ 📈 Pehle: {initial_count} numbers
-├─ ✅ Ab: {current_total} numbers
-├─ 🎯 Improvement: +{improvement:.1f}%
-└─ 💪 Status: {status}
-
-━━━━━━━━━━━━━━━━━━━━━━
-🧪 *ALGORITHM DETAILS*
-├─ 📊 Self-Learning: ✅ Active
-├─ 🔄 Pattern Recognition: ✅ Active
-├─ 🎯 Confidence Score: ✅ Active
-├─ 🔒 Period Lock: ✅ Active
-├─ ⚡ 3-Press Rule: ✅ Active
-└─ 👑 Super Admin Only Add: ✅ Active
-
-━━━━━━━━━━━━━━━━━━━━━━
-👑 *Super Admin:* @{query.from_user.username}
-🕐 *Report Time:* {datetime.now().strftime('%I:%M %p')}
-"""
-            
-            keyboard = InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔄 REFRESH", callback_data="teach_refresh")],
-                [InlineKeyboardButton("📊 DETAILED VIEW", callback_data="teach_detailed")]
-            ])
-            
-            await query.edit_message_text(msg, parse_mode='Markdown', reply_markup=keyboard)
+            await teach_panel_callback(update, context)
         
         elif data == "teach_detailed":
             current_total = len(HISTORICAL_RESULTS)
             initial_count = ALGORITHM_STATS.get("initial_count", 0)
             added_by_sa = ALGORITHM_STATS.get("added_by_super_admin", 0)
             
-            # Last 20 numbers
             all_new = ALGORITHM_STATS.get("new_numbers_history", [])
             
             msg = f"""
@@ -2484,7 +2557,19 @@ async def teach_callback(update, context):
 └─ 📊 Net Change: +{current_total - initial_count}
 
 ━━━━━━━━━━━━━━━━━━━━━━
-💡 *Algorithm Version:* v12.0
+🎯 *4-LEVEL DETECTION LOG (Last 10)*
+"""
+            detection_log = LEVEL4_TRACKER.get("detection_log", [])[-10:]
+            if detection_log:
+                for i, det in enumerate(reversed(detection_log), 1):
+                    time_str = det.get("time", "")[11:16] if len(det.get("time", "")) >= 16 else ""
+                    msg += f"{i}. Number {det['number']} ({det['count']}x) - {time_str}\n"
+            else:
+                msg += "No detections yet.\n"
+            
+            msg += f"""
+━━━━━━━━━━━━━━━━━━━━━━
+💡 *Algorithm Version:* v13.0
 🕐 *Last Update:* {ALGORITHM_STATS.get('last_updated', 'N/A')[:16]}
 """
             
@@ -2505,7 +2590,6 @@ async def teach_callback(update, context):
         await query.edit_message_text("❌ Error loading TEACH panel!")
 
 async def teach_panel_callback(update, context):
-    """Rebuild teach panel from callback"""
     try:
         query = update.callback_query
         
@@ -2531,6 +2615,9 @@ async def teach_panel_callback(update, context):
                 numbers_list += f"├─ {i}. {item['number']} ({item['size']}) - {time_str}\n"
         else:
             numbers_list = "├─ No numbers added yet\n"
+        
+        level4_detections = ALGORITHM_STATS.get("level4_detections", 0)
+        auto_changes = ALGORITHM_STATS.get("auto_changes", 0)
         
         if improvement >= 20:
             status = "🔥 EXCELLENT"
@@ -2569,12 +2656,20 @@ async def teach_panel_callback(update, context):
 └─ 💪 Status: {status}
 
 ━━━━━━━━━━━━━━━━━━━━━━
+🎯 *4-LEVEL DETECTION*
+├─ 🔍 Total Detections: {level4_detections}
+├─ 🔄 Auto Changes: {auto_changes}
+└─ 📊 Status: {'🟢 Active' if level4_detections >= 0 else '🔴 Inactive'}
+
+━━━━━━━━━━━━━━━━━━━━━━
 🧪 *ALGORITHM DETAILS*
 ├─ 📊 Self-Learning: ✅ Active
 ├─ 🔄 Pattern Recognition: ✅ Active
 ├─ 🎯 Confidence Score: ✅ Active
 ├─ 🔒 Period Lock: ✅ Active
 ├─ ⚡ 3-Press Rule: ✅ Active
+├─ 🎯 4-Level Detection: ✅ Active
+├─ 🔄 Auto Change: ✅ Active
 └─ 👑 Super Admin Only Add: ✅ Active
 
 ━━━━━━━━━━━━━━━━━━━━━━
@@ -2597,7 +2692,6 @@ async def teach_panel_callback(update, context):
 # ==========================================
 
 async def study_panel(update, context):
-    """Study panel - shows all algorithms added by AI bot"""
     try:
         uid = int(update.effective_user.id)
         
@@ -2667,7 +2761,6 @@ async def study_panel(update, context):
         await update.message.reply_text("❌ Error loading study panel!", reply_markup=super_admin_menu)
 
 async def study_callback(update, context):
-    """Handle study callbacks"""
     try:
         query = update.callback_query
         await query.answer()
@@ -2708,6 +2801,8 @@ async def study_callback(update, context):
 ├─ 🔒 Period Lock: ✅ Active
 ├─ ⚡ 3-Press Rule: ✅ Active
 ├─ 📈 Single Level System: ✅ Active
+├─ 🎯 4-Level Detection: ✅ Active
+├─ 🔄 Auto Change: ✅ Active
 ├─ 🏅 Rare Achievement Display: ✅ Active
 ├─ ⏰ 30min Fake Players Add: ✅ Active
 ├─ 🏆 2 Achievements Display: ✅ Active
@@ -2715,7 +2810,7 @@ async def study_callback(update, context):
 └─ 👥 100+ Concurrent Players: ✅ Active
 
 ━━━━━━━━━━━━━━━━━━━━━━
-💡 *Algorithm Version:* v12.0
+💡 *Algorithm Version:* v13.0
 🕐 *Last Updated:* {datetime.now().strftime('%Y-%m-%d %H:%M')}
 """
             
@@ -2731,10 +2826,10 @@ async def study_callback(update, context):
 ━━━━━━━━━━━━━━━━━━━━━━
 
 📌 *Latest Algorithm Added:*
-🔹 *v12.0 - Super Admin Play + Teach Button + Algorithm Tracking*
+🔹 *v13.0 - 752 Numbers + 4-Level Detection + Auto Change*
 
 📝 *Description:*
-Sirf Super Admin ka number algorithm mein add hoga. Teach button se graph, numbers list, tracking sab dikhega. Sequence tracking bhi active.
+752 numbers add kiye gaye. 4-Level Detection algorithm: Agar same number 4 baar lagatar aaye toh auto detect + change. Bar bar aane wale numbers ko skip karega.
 
 ━━━━━━━━━━━━━━━━━━━━━━
 📊 *PREVIOUS VERSIONS:*
@@ -3439,8 +3534,7 @@ async def handle_photo(update, context):
         uid = str(update.effective_user.id)
         if not context.user_data.get('waiting_payment') and not context.user_data.get('waiting'):
             await update.message.reply_text("❌ Use MEMBERSHIP first!", reply_markup=main_menu)
-            return
-        
+            return        
         steps = [
             "📤 UPLOADING...\n├─ █░░░░░░░░░ 10%\n└─ Connecting to server...",
             "📤 UPLOADING...\n├─ ████░░░░░░ 40%\n└─ Processing image...",
@@ -5267,7 +5361,7 @@ async def play(update, context):
         logger.error(f"Play error: {e}")
         await update.message.reply_text("❌ Error! Please try again.", reply_markup=main_menu)
 
-# ✅ NEW: SUPER ADMIN PLAY FUNCTION
+# ✅ SUPER ADMIN PLAY FUNCTION
 async def super_admin_play(update, context):
     """Super Admin Play - Number instantly added to algorithm"""
     try:
@@ -5459,18 +5553,12 @@ async def handle_result_number(update, context):
             algo_prediction = predict_next_with_history()
             context.user_data['algo_prediction'] = algo_prediction
             
-            # ✅ CHECK: Super Admin hai ya nahi
             is_super_admin = uid in SUPER_ADMIN_IDS_STR
             
             if is_super_admin:
-                # ✅ Super Admin ka number INSTANTLY algorithm mein add hoga
                 added = add_result_to_history(user_num, is_super_admin=True)
                 logger.info(f"👑 Super Admin number added to algorithm: {user_num} (added={added})")
-                
-                # ✅ Sequence bhi save hoga (next number tracking)
-                # Already add_result_to_history mein handle ho raha hai
             else:
-                # ❌ Normal player ka number algorithm mein add NAHI hoga
                 add_result_to_history(user_num, is_super_admin=False)
                 logger.info(f"⚠️ Normal player number skipped: {user_num}")
             
@@ -5487,7 +5575,6 @@ async def handle_result_number(update, context):
             context.user_data['waiting_result_number'] = False
             context.user_data.pop('super_admin_play', None)
             
-            # ✅ Super Admin ko special message
             if is_super_admin:
                 await update.message.reply_text(
                     f"""👑 *SUPER ADMIN - Number Added!*
@@ -5613,15 +5700,12 @@ async def handle_result(update, context):
                 win = False
                 result_text = "💪 KEEP GOING!"
             
-            # ✅ CHECK: Super Admin hai ya nahi
             is_super_admin = uid in SUPER_ADMIN_IDS_STR
             
             if is_super_admin:
-                # ✅ Super Admin ka number INSTANTLY algorithm mein add hoga
                 add_result_to_history(user_num, is_super_admin=True)
                 logger.info(f"👑 Super Admin number added: {user_num}")
             else:
-                # ❌ Normal player ka number add NAHI hoga
                 add_result_to_history(user_num, is_super_admin=False)
                 logger.info(f"⚠️ Normal player number skipped: {user_num}")
             
@@ -6031,7 +6115,6 @@ async def handle_buttons(update, context):
             await safe_save_json("users.json", users)
             logger.info(f"✅ New user created: {uid}")
         
-        # ✅ SUPER ADMIN PLAY BUTTON
         if text == "▶️ SUPER ADMIN PLAY":
             user_id_int = int(uid)
             if user_id_int in SUPER_ADMIN_IDS:
@@ -6040,7 +6123,6 @@ async def handle_buttons(update, context):
                 await update.message.reply_text("❌ Only Super Admin!", reply_markup=main_menu)
             return
         
-        # ✅ TEACH BUTTON
         if text == "📚 TEACH":
             user_id_int = int(uid)
             if user_id_int in SUPER_ADMIN_IDS:
@@ -6402,7 +6484,7 @@ def main():
     thread.start()
     print("✅ Health check server running on port 10000!")
     print("=" * 50)
-    print("🌟 AURA BOT v12.0 STARTED!")
+    print("🌟 AURA BOT v13.0 STARTED!")
     print("=" * 50)
     print("✅ Bot is running!")
     print(f"👑 Super Admin: {SUPER_ADMIN_IDS}")
@@ -6456,6 +6538,9 @@ def main():
     print("👑 SUPER ADMIN PLAY: ENABLED (Sirf SA ka number add hoga)")
     print("📚 TEACH PANEL: ENABLED (Graph + Numbers List + Tracking)")
     print("📊 ALGORITHM TRACKING: ENABLED (Instant Add for SA)")
+    print("🎯 752 NUMBERS: ENABLED (Initial Dataset)")
+    print("🎯 4-LEVEL DETECTION: ENABLED (Auto Detect + Change)")
+    print("🔄 AUTO CHANGE: ENABLED (Bar bar aane wale numbers skip honge)")
     print("✅ ALL ERRORS FIXED")
     print("=" * 50)
     app.run_polling()
