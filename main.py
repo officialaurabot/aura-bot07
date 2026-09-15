@@ -2309,9 +2309,6 @@ def build_bar_graph(data_dict, max_days=7):
     
     return graph
 
-# ==========================================
-# ⭐ ACCUSS VIP FUNCTION
-# ==========================================
 async def accuss_vip(update, context):
     try:
         keyboard = []
@@ -2330,22 +2327,44 @@ async def accuss_vip(update, context):
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
         
-        # 🎤 VOICE NOTE BHEJO (FILE SE)
+        # 🎤 VOICE NOTE BHEJO (ERROR-PROOF VERSION)
+        voice_sent = False
         try:
             if os.path.exists(VIP_VOICE_FILE):
                 with open(VIP_VOICE_FILE, 'rb') as f:
-                    await update.message.reply_voice(voice=InputFile(f))
-                logger.info(f"✅ Voice sent: {VIP_VOICE_FILE}")
+                    voice_data = f.read()
+                await update.message.reply_voice(voice=voice_data)
+                voice_sent = True
+                logger.info(f"✅ Voice sent from file: {VIP_VOICE_FILE}")
             else:
-                logger.error(f"❌ Voice file not found: {VIP_VOICE_FILE}")
+                # Try alternate names
+                for alt_name in ["vip_voice.ogg", "vip_voice.mp3", "vip_voice.ogg.mp3", "vip_voice.ogg.ogg"]:
+                    if os.path.exists(alt_name):
+                        with open(alt_name, 'rb') as f:
+                            voice_data = f.read()
+                        await update.message.reply_voice(voice=voice_data)
+                        voice_sent = True
+                        logger.info(f"✅ Voice sent from alternate: {alt_name}")
+                        break
+                
+                if not voice_sent:
+                    logger.error(f"❌ Voice file not found. Tried: {VIP_VOICE_FILE} and alternates")
         except Exception as e:
             logger.error(f"Voice send error: {e}")
         
         context.user_data['waiting_payment'] = True
+        logger.info(f"✅ ACCUSS VIP shown to user {update.effective_user.id}, voice_sent={voice_sent}")
         
     except Exception as e:
-        logger.error(f"Accuss VIP error: {e}")
-        await update.message.reply_text("❌ Error! Please try again.", reply_markup=main_menu)
+        logger.error(f"❌ ACCUSS VIP error: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        await update.message.reply_text(
+            "❌ *Error aaya!*\n\n"
+            "Admin ko bata do. Ya /start karke dobara try karo.",
+            parse_mode='Markdown',
+            reply_markup=main_menu
+        )
 
 # ==========================================
 # ⭐ TEACH PANEL (SUPER ADMIN ONLY)
