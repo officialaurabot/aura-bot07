@@ -2310,42 +2310,34 @@ def build_bar_graph(data_dict, max_days=7):
     return graph
 
 # ==========================================
-# ⭐ ACCUSS VIP FUNCTION (FIXED - VOICE + LINKS)
+# ⭐ ACCUSS VIP FUNCTION (FIXED - LINKS FIRST, VOICE AFTER)
 # ==========================================
 async def accuss_vip(update, context):
     try:
         logger.info(f"🎮 ACCUSS VIP triggered by user {update.effective_user.id}")
         
-        # Step 1: Links wala keyboard banao
+        # Step 1: PEHLE LINKS WALA MESSAGE BHEJO
         keyboard = []
         for link in GAMER_LINKS:
             keyboard.append([InlineKeyboardButton(link["name"], url=link["url"])])
         
-        # Step 2: Text message bhejo (links ke saath) - simple text without complex markdown
-        try:
-            await update.message.reply_text(
-                "🎮 ACCUSS VIP\n"
-                "━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                "👇 Niche diye gaye link se apna ID banao\n"
-                "💰 ₹300 deposit karo\n"
-                "📸 Screenshot bhejo\n"
-                "✅ VIP activate ho jayega\n\n"
-                "━━━━━━━━━━━━━━━━━━━━━━\n"
-                "🎯 Select Your Game:",
-                reply_markup=InlineKeyboardMarkup(keyboard)
-            )
-            logger.info("✅ ACCUSS VIP text sent")
-        except Exception as e:
-            logger.error(f"❌ Text send error: {e}")
-            try:
-                await update.message.reply_text(
-                    "🎮 ACCUSS VIP\n\nSelect your game below:",
-                    reply_markup=InlineKeyboardMarkup(keyboard)
-                )
-            except Exception as e2:
-                logger.error(f"❌ Even simple text failed: {e2}")
+        await update.message.reply_text(
+            "🎮 ACCUSS VIP\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            "👇 Niche diye gaye link se apna ID banao\n"
+            "💰 ₹300 deposit karo\n"
+            "📸 Screenshot bhejo\n"
+            "✅ VIP activate ho jayega\n\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "🎯 Select Your Game:",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        logger.info("✅ Links sent")
         
-        # Step 3: Voice note bhejo
+        # Step 2: 1 second wait (taaki links dikhein)
+        await asyncio.sleep(1)
+        
+        # Step 3: AB VOICE NOTE BHEJO
         voice_sent = False
         try:
             possible_files = [
@@ -2360,12 +2352,6 @@ async def accuss_vip(update, context):
                 "voice.mp3",
             ]
             
-            logger.info(f"🔍 Searching for voice file in: {os.getcwd()}")
-            try:
-                logger.info(f"📁 Files available: {os.listdir()}")
-            except Exception as le:
-                logger.error(f"❌ Cannot list dir: {le}")
-            
             voice_file_found = None
             for fname in possible_files:
                 if os.path.exists(fname):
@@ -2374,41 +2360,30 @@ async def accuss_vip(update, context):
                     break
             
             if voice_file_found:
+                with open(voice_file_found, 'rb') as f:
+                    voice_bytes = f.read()
+                logger.info(f"📦 Voice file size: {len(voice_bytes)} bytes")
+                
                 try:
-                    with open(voice_file_found, 'rb') as f:
-                        voice_bytes = f.read()
-                    logger.info(f"📦 Voice file size: {len(voice_bytes)} bytes")
-                    
-                    # Try as voice note first
+                    await update.message.reply_voice(voice=voice_bytes)
+                    voice_sent = True
+                    logger.info(f"✅ Voice sent as voice note: {voice_file_found}")
+                except Exception as e1:
+                    logger.error(f"❌ reply_voice failed: {e1}")
                     try:
-                        await update.message.reply_voice(voice=voice_bytes)
+                        await update.message.reply_audio(audio=voice_bytes)
                         voice_sent = True
-                        logger.info(f"✅ Voice sent as voice note: {voice_file_found}")
-                    except Exception as e1:
-                        logger.error(f"❌ reply_voice failed: {e1}")
-                        # Fallback: send as audio
-                        try:
-                            await update.message.reply_audio(audio=voice_bytes)
-                            voice_sent = True
-                            logger.info(f"✅ Voice sent as audio: {voice_file_found}")
-                        except Exception as e2:
-                            logger.error(f"❌ reply_audio also failed: {e2}")
-                except Exception as fe:
-                    logger.error(f"❌ File read error: {fe}")
+                        logger.info(f"✅ Voice sent as audio: {voice_file_found}")
+                    except Exception as e2:
+                        logger.error(f"❌ reply_audio also failed: {e2}")
             else:
-                logger.error(f"❌ NO VOICE FILE FOUND. Looked for: {possible_files}")
-                try:
-                    logger.error(f"📁 Directory contents: {os.listdir()}")
-                except:
-                    pass
+                logger.error(f"❌ NO VOICE FILE FOUND")
         
         except Exception as e:
-            logger.error(f"❌ Voice send outer error: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
+            logger.error(f"❌ Voice send error: {e}")
         
         context.user_data['waiting_payment'] = True
-        logger.info(f"✅ ACCUSS VIP done for user {update.effective_user.id}, voice_sent={voice_sent}")
+        logger.info(f"✅ ACCUSS VIP done, voice_sent={voice_sent}")
         
     except Exception as e:
         logger.error(f"❌❌ ACCUSS VIP CRITICAL ERROR: {e}")
