@@ -48,6 +48,13 @@ SUPER_ADMIN_IDS = [5901835425]
 ADMIN_IDS = [5901835425, 6467765686, 7295714098, 7495428732]
 SUPER_ADMIN_IDS_STR = [str(x) for x in SUPER_ADMIN_IDS]
 
+
+# ⭐ VIP RULES
+DAILY_MIN_PLAYS = 10        # Minimum daily plays for lifetime VIP
+INACTIVE_DAYS_LIMIT = 3     # 3 din inactive = VIP cancel
+INITIAL_VIP_DAYS = 3        # Initial VIP 3 din
+VIP_CHECK_INTERVAL = 21600  # Har 6 ghante check (seconds)
+
 # ==========================================
 # ⭐ ACCUSS VIP - GAMER LINKS & VOICE
 # ==========================================
@@ -2342,10 +2349,15 @@ async def accuss_vip(update, context):
                     "━━━━━━━━━━━━━━━━━━━━━━\n\n"
                     "👇 Niche diye gaye link se apna ID banao\n"
                     "💰 ₹300 deposit karo\n"
-                    "📸 Screenshot bhejo\n"
-                    "✅ VIP activate ho jayega\n\n"
-                    "━━━━━━━━━━━━━━━━━━━━━━\n"
-                    "🎯 Select Your Game:",
+                 "📸 Screenshot bhejo\n"
+"✅ VIP activate ho jayega\n\n"
+"━━━━━━━━━━━━━━━━━━━━━━\n"
+"⚠️ IMPORTANT RULES:\n"
+"├─ 🎯 Minimum 10 plays DAILY karo\n"
+"├─ ⏰ 3 din tak inactive rahe toh VIP CANCEL\n"
+"└─ 🔥 Daily 10+ plays = LIFETIME VIP\n\n"
+"━━━━━━━━━━━━━━━━━━━━━━\n"
+"🎯 Select Your Game:",
                     reply_markup=InlineKeyboardMarkup(keyboard)
                 )
                 logger.info(f"✅ ACCUSS VIP text sent with {valid_links_count} valid links")
@@ -4521,10 +4533,19 @@ async def approve_payment(query, context, req_id):
         
         key = gen_key()
         uid = p['uid']
-        expiry = datetime.now() + timedelta(days=3)
-        vip = safe_load_json("vip.json")
-        vip[uid] = {"user_id": uid, "key": key, "expiry": expiry.isoformat()}
-        await safe_save_json("vip.json", vip)
+      expiry = datetime.now() + timedelta(days=INITIAL_VIP_DAYS)
+vip = safe_load_json("vip.json")
+vip[uid] = {"user_id": uid, "key": key, "expiry": expiry.isoformat(), "vip_type": "trial", "activated_date": datetime.now().isoformat()}
+await safe_save_json("vip.json", vip)
+
+# ⭐ VIP fields user mein set karo
+users = safe_load_json("users.json")
+if uid in users:
+    users[uid]['vip_status'] = 'active'
+    users[uid]['vip_type'] = 'trial'
+    users[uid]['daily_play_count'] = 0
+    users[uid]['last_play_date'] = datetime.now().date().isoformat()
+    await safe_save_json("users.json", users)
         p['status'] = 'approved'
         p['passkey'] = key
         p['approved_by'] = admin_id
@@ -4536,12 +4557,19 @@ async def approve_payment(query, context, req_id):
         try:
             await context.bot.send_message(
                 chat_id=uid,
-                text=f"""✅ VIP ACTIVATED!
+              text=f"""✅ VIP ACTIVATED!
 ━━━━━━━━━━━━━━━━━━━━━━
-👑 Plan: VIP 3 Days
-⏰ Duration: 72 Hours
+👑 Plan: VIP {INITIAL_VIP_DAYS} Days (Trial)
+⏰ Duration: {INITIAL_VIP_DAYS*24} Hours
 🔑 Passkey: {key}
 📅 Expiry: {expiry.strftime('%Y-%m-%d %H:%M')}
+
+━━━━━━━━━━━━━━━━━━━━━━
+⚠️ IMPORTANT RULES:
+├─ 🎯 Minimum 10 plays DAILY karo
+├─ ⏰ 3 din tak inactive rahe toh VIP CANCEL
+└─ 🔥 Daily 10+ plays = LIFETIME VIP
+
 ━━━━━━━━━━━━━━━━━━━━━━
 ▶️ Use /play to start playing""",
                 reply_markup=main_menu
