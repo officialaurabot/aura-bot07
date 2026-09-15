@@ -3227,6 +3227,57 @@ async def device_tracking_callback(update, context):
         logger.error(f"Device tracking callback error: {e}")
         await query.edit_message_text("❌ Error loading device tracking!", reply_markup=admin_menu)
 
+# ==========================================
+# ⭐ SHOW DEVICES (Command Handler)
+# ==========================================
+async def show_devices(update, context):
+    try:
+        uid = int(update.effective_user.id)
+        
+        if uid not in ADMIN_IDS and uid not in SUPER_ADMIN_IDS:
+            await update.message.reply_text("❌ Access Denied! Admin only.")
+            return
+        
+        users = safe_load_json("users.json")
+        
+        devices = {}
+        for user_id, user_data in users.items():
+            device_id = user_data.get('device_id', '')
+            if device_id:
+                if device_id not in devices:
+                    devices[device_id] = []
+                devices[device_id].append({
+                    'username': user_data.get('username', 'Unknown'),
+                    'user_id': user_id,
+                    'is_fake': user_data.get('is_fake', False)
+                })
+        
+        if not devices:
+            await update.message.reply_text("📭 No devices found!")
+            return
+        
+        msg = f"""
+📱 *UNIQUE DEVICES ({len(devices)})*
+━━━━━━━━━━━━━━━━━━━━━━
+"""
+        for device_id, users_list in list(devices.items())[:30]:
+            msg += f"📱 `{device_id[:12]}...` -> {len(users_list)} users\n"
+            for u in users_list[:3]:
+                fake_tag = " (FAKE)" if u['is_fake'] else ""
+                msg += f"   👤 @{u['username']} (ID: {u['user_id']}){fake_tag}\n"
+            if len(users_list) > 3:
+                msg += f"   ... and {len(users_list)-3} more\n"
+            msg += "━━━━━━━━━━━━━━━━━━━━━━\n"
+        
+        await update.message.reply_text(msg, parse_mode='Markdown')
+        
+    except Exception as e:
+        logger.error(f"Show devices error: {e}")
+        await update.message.reply_text("❌ Error loading devices!", reply_markup=admin_menu)
+
+
+
+
 async def cancel_vip_callback(update, context):
     try:
         query = update.callback_query
