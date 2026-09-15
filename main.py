@@ -4533,19 +4533,19 @@ async def approve_payment(query, context, req_id):
         
         key = gen_key()
         uid = p['uid']
-      expiry = datetime.now() + timedelta(days=INITIAL_VIP_DAYS)
-vip = safe_load_json("vip.json")
-vip[uid] = {"user_id": uid, "key": key, "expiry": expiry.isoformat(), "vip_type": "trial", "activated_date": datetime.now().isoformat()}
-await safe_save_json("vip.json", vip)
+        expiry = datetime.now() + timedelta(days=INITIAL_VIP_DAYS)
+        vip = safe_load_json("vip.json")
+        vip[uid] = {"user_id": uid, "key": key, "expiry": expiry.isoformat(), "vip_type": "trial", "activated_date": datetime.now().isoformat()}
+        await safe_save_json("vip.json", vip)
 
-# ⭐ VIP fields user mein set karo
-users = safe_load_json("users.json")
-if uid in users:
-    users[uid]['vip_status'] = 'active'
-    users[uid]['vip_type'] = 'trial'
-    users[uid]['daily_play_count'] = 0
-    users[uid]['last_play_date'] = datetime.now().date().isoformat()
-    await safe_save_json("users.json", users)
+        # ⭐ VIP fields user mein set karo
+        users = safe_load_json("users.json")
+        if uid in users:
+            users[uid]['vip_status'] = 'active'
+            users[uid]['vip_type'] = 'trial'
+            users[uid]['daily_play_count'] = 0
+            users[uid]['last_play_date'] = datetime.now().date().isoformat()
+            await safe_save_json("users.json", users)
         p['status'] = 'approved'
         p['passkey'] = key
         p['approved_by'] = admin_id
@@ -4557,7 +4557,7 @@ if uid in users:
         try:
             await context.bot.send_message(
                 chat_id=uid,
-              text=f"""✅ VIP ACTIVATED!
+                text=f"""✅ VIP ACTIVATED!
 ━━━━━━━━━━━━━━━━━━━━━━
 👑 Plan: VIP {INITIAL_VIP_DAYS} Days (Trial)
 ⏰ Duration: {INITIAL_VIP_DAYS*24} Hours
