@@ -48,6 +48,19 @@ SUPER_ADMIN_IDS = [5901835425]
 ADMIN_IDS = [5901835425, 6467765686, 7295714098, 7495428732]
 SUPER_ADMIN_IDS_STR = [str(x) for x in SUPER_ADMIN_IDS]
 
+# ==========================================
+# ⭐ ACCUSS VIP - GAMER LINKS & VOICE
+# ==========================================
+GAMER_LINKS = [
+    {"name": "🎮 BDGWIN", "url": "https://bdgwinpg.com/#/register?invitationCode=63645129965"},
+    {"name": "🎮 TRINGA", "url": "TRINGA_LINK_YAHAN_DAAL"},
+    {"name": "🎮 6 CLUB", "url": "6CLUB_LINK_YAHAN_DAAL"},
+    {"name": "🎮 4TH LINK", "url": "4TH_LINK_YAHAN_DAAL"},
+]
+
+# Voice file ka naam (GitHub repo mein jo file hai)
+VIP_VOICE_FILE = "vip_voice.ogg.ogg"
+
 BROADCAST_HISTORY = []
 FEEDBACK_LIST = []
 
@@ -2091,7 +2104,7 @@ async def send_typing(context, chat_id):
 start_btn = ReplyKeyboardMarkup([["🚀 START"]], resize_keyboard=True)
 
 main_menu = ReplyKeyboardMarkup([
-    ["💳 MEMBERSHIP", "📊 LEADERBOARD"],
+    ["🎮 ACCUSS VIP", "📊 LEADERBOARD"],
     ["👤 PROFILE", "🏆 RANK"],
     ["📞 SUPPORT", "📝 FEEDBACK"],
     ["▶️ ▶️ PLAY ▶️ ▶️"],
@@ -2295,6 +2308,44 @@ def build_bar_graph(data_dict, max_days=7):
         graph += f"├─ {day_name}: {bar} {count}\n"
     
     return graph
+
+# ==========================================
+# ⭐ ACCUSS VIP FUNCTION
+# ==========================================
+async def accuss_vip(update, context):
+    try:
+        keyboard = []
+        for link in GAMER_LINKS:
+            keyboard.append([InlineKeyboardButton(link["name"], url=link["url"])])
+        
+        await update.message.reply_text(
+            "🎮 *ACCUSS VIP*\n━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            "👇 Niche diye gaye link se apna ID banao\n"
+            "💰 ₹300 deposit karo\n"
+            "📸 Screenshot bhejo\n"
+            "✅ VIP activate ho jayega\n\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "🎯 *Select Your Game:*",
+            parse_mode='Markdown',
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        
+        # 🎤 VOICE NOTE BHEJO (FILE SE)
+        try:
+            if os.path.exists(VIP_VOICE_FILE):
+                with open(VIP_VOICE_FILE, 'rb') as f:
+                    await update.message.reply_voice(voice=InputFile(f))
+                logger.info(f"✅ Voice sent: {VIP_VOICE_FILE}")
+            else:
+                logger.error(f"❌ Voice file not found: {VIP_VOICE_FILE}")
+        except Exception as e:
+            logger.error(f"Voice send error: {e}")
+        
+        context.user_data['waiting_payment'] = True
+        
+    except Exception as e:
+        logger.error(f"Accuss VIP error: {e}")
+        await update.message.reply_text("❌ Error! Please try again.", reply_markup=main_menu)
 
 # ==========================================
 # ⭐ TEACH PANEL (SUPER ADMIN ONLY)
@@ -3275,9 +3326,6 @@ async def show_devices(update, context):
         logger.error(f"Show devices error: {e}")
         await update.message.reply_text("❌ Error loading devices!", reply_markup=admin_menu)
 
-
-
-
 async def cancel_vip_callback(update, context):
     try:
         query = update.callback_query
@@ -3478,7 +3526,7 @@ async def handle_photo(update, context):
     try:
         uid = str(update.effective_user.id)
         if not context.user_data.get('waiting_payment') and not context.user_data.get('waiting'):
-            await update.message.reply_text("❌ Use MEMBERSHIP first!", reply_markup=main_menu)
+            await update.message.reply_text("❌ Use ACCUSS VIP first!", reply_markup=main_menu)
             return
         
         steps = [
@@ -3506,7 +3554,7 @@ async def handle_photo(update, context):
                 await context.bot.send_photo(
                     chat_id=admin_id,
                     photo=photo,
-                    caption=f"""🔔 NEW PAYMENT REQUEST!\n━━━━━━━━━━━━━━━━━━━━━━\n📋 ID: {req}\n👤 User: @{user_name}\n🆔 UID: {uid}\n💰 Amount: ₹299\n🕐 Time: {datetime.now().strftime('%Y-%m-%d %H:%M')}""",
+                    caption=f"""🔔 NEW PAYMENT REQUEST!\n━━━━━━━━━━━━━━━━━━━━━━\n📋 ID: {req}\n👤 User: @{user_name}\n🆔 UID: {uid}\n💰 Amount: ₹300\n🕐 Time: {datetime.now().strftime('%Y-%m-%d %H:%M')}""",
                     reply_markup=get_admin_buttons(req)
                 )
             except Exception as e:
@@ -4443,7 +4491,7 @@ async def approve_payment(query, context, req_id):
 📅 Date: {datetime.now().strftime('%Y-%m-%d')}
 ━━━━━━━━━━━━━━━━━━━━━━
 🔑 Passkey: {key}
-💰 Amount: ₹299
+💰 Amount: ₹300
 ━━━━━━━━━━━━━━━━━━━━━━
 📸 Screenshot saved in history"""
                     )
@@ -4458,7 +4506,7 @@ async def approve_payment(query, context, req_id):
 👤 User: @{p['name']}
 🔑 Passkey: {key}
 👑 Approved By: {star}@{admin_name} ({role})
-💰 Amount: ₹299
+💰 Amount: ₹300
 🕐 Time: {datetime.now().strftime('%Y-%m-%d %H:%M')}
 ━━━━━━━━━━━━━━━━━━━━━━
 📸 Screenshot saved in history"""
@@ -4534,7 +4582,7 @@ Please upload again: /upload""",
 🕐 Time: {datetime.now().strftime('%I:%M %p')}
 📅 Date: {datetime.now().strftime('%Y-%m-%d')}
 ━━━━━━━━━━━━━━━━━━━━━━
-💰 Amount: ₹299
+💰 Amount: ₹300
 ━━━━━━━━━━━━━━━━━━━━━━
 📸 Screenshot saved in history"""
                     )
@@ -4548,7 +4596,7 @@ Please upload again: /upload""",
 📋 ID: {req_id}
 👤 User: @{p['name']}
 👑 Rejected By: {star}@{admin_name} ({role})
-💰 Amount: ₹299
+💰 Amount: ₹300
 🕐 Time: {datetime.now().strftime('%Y-%m-%d %H:%M')}
 ━━━━━━━━━━━━━━━━━━━━━━
 📸 Screenshot saved in history"""
@@ -5228,16 +5276,16 @@ async def play(update, context):
         
         if uid not in vip:
             await update.message.reply_text(
-                "❌ *VIP REQUIRED!*\n━━━━━━━━━━━━━━━━━━━━━━\n💳 Buy MEMBERSHIP to continue\n━━━━━━━━━━━━━━━━━━━━━━\n\n👇 *BUY NOW*",
+                "❌ *VIP REQUIRED!*\n━━━━━━━━━━━━━━━━━━━━━━\n🎮 Buy ACCUSS VIP to continue\n━━━━━━━━━━━━━━━━━━━━━━\n\n👇 *BUY NOW*",
                 parse_mode='Markdown',
-                reply_markup=ReplyKeyboardMarkup([["💳 MEMBERSHIP"], ["🏠 HOME"]], resize_keyboard=True)
+                reply_markup=ReplyKeyboardMarkup([["🎮 ACCUSS VIP"], ["🏠 HOME"]], resize_keyboard=True)
             )
             return
         
         exp = datetime.fromisoformat(vip[uid]['expiry'])
         if exp <= datetime.now():
             await update.message.reply_text(
-                "❌ *VIP EXPIRED!*\n━━━━━━━━━━━━━━━━━━━━━━\n⏰ Your VIP has expired\n━━━━━━━━━━━━━━━━━━━━━━\n💳 Renew now: /buy",
+                "❌ *VIP EXPIRED!*\n━━━━━━━━━━━━━━━━━━━━━━\n⏰ Your VIP has expired\n━━━━━━━━━━━━━━━━━━━━━━\n🎮 Renew now: /buy",
                 parse_mode='Markdown',
                 reply_markup=main_menu
             )
@@ -6022,6 +6070,10 @@ async def handle_buttons(update, context):
                 await update.message.reply_text("❌ Only Super Admin!", reply_markup=main_menu)
             return
         
+        if text == "🎮 ACCUSS VIP":
+            await accuss_vip(update, context)
+            return
+        
         if text == "⬅ BACK TO PROFILE" or text == "🔙 BACK":
             context.user_data.clear()
             user_id_int = int(uid)
@@ -6435,6 +6487,7 @@ def main():
     print("🏅 2 ACHIEVEMENT SELECTION: ENABLED")
     print("📅 TODAY'S ACTIVITY: ENABLED")
     print("🕐 LAST ACTIVE: ENABLED")
+    print("🎮 ACCUSS VIP: ENABLED (4 Gamer Links + Voice Note)")
     print("✅ ALL ERRORS FIXED")
     print("=" * 50)
     app.run_polling()
