@@ -2310,13 +2310,13 @@ def build_bar_graph(data_dict, max_days=7):
     return graph
 
 # ==========================================
-# ⭐ ACCUSS VIP FUNCTION (FIXED - LINKS FIRST, VOICE AFTER)
+# ⭐ ACCUSS VIP FUNCTION (LINKS FIRST, VOICE AFTER)
 # ==========================================
 async def accuss_vip(update, context):
     try:
         logger.info(f"🎮 ACCUSS VIP triggered by user {update.effective_user.id}")
         
-        # Step 1: PEHLE LINKS WALA MESSAGE BHEJO
+        # Step 1: LINKS WALA MESSAGE BHEJO
         keyboard = []
         for link in GAMER_LINKS:
             keyboard.append([InlineKeyboardButton(link["name"], url=link["url"])])
@@ -2332,12 +2332,12 @@ async def accuss_vip(update, context):
             "🎯 Select Your Game:",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
-        logger.info("✅ Links sent")
+        logger.info("✅ Links sent successfully")
         
-        # Step 2: 1 second wait (taaki links dikhein)
+        # Step 2: 1 second wait
         await asyncio.sleep(1)
         
-        # Step 3: AB VOICE NOTE BHEJO
+        # Step 3: VOICE NOTE BHEJO
         voice_sent = False
         try:
             possible_files = [
@@ -2367,13 +2367,13 @@ async def accuss_vip(update, context):
                 try:
                     await update.message.reply_voice(voice=voice_bytes)
                     voice_sent = True
-                    logger.info(f"✅ Voice sent as voice note: {voice_file_found}")
+                    logger.info(f"✅ Voice sent as voice note")
                 except Exception as e1:
                     logger.error(f"❌ reply_voice failed: {e1}")
                     try:
                         await update.message.reply_audio(audio=voice_bytes)
                         voice_sent = True
-                        logger.info(f"✅ Voice sent as audio: {voice_file_found}")
+                        logger.info(f"✅ Voice sent as audio")
                     except Exception as e2:
                         logger.error(f"❌ reply_audio also failed: {e2}")
             else:
@@ -6494,63 +6494,7 @@ def main():
     print("✅ Bot is running!")
     print(f"👑 Super Admin: {SUPER_ADMIN_IDS}")
     print(f"📌 All Admins: {ADMIN_IDS}")
-    print("🛡️ Device Tracking: ENABLED")
-    print("🎯 Dopamine Hit: ENABLED (Win/Loss Emojis - 3s Auto-Delete)")
-    print("🔮 BIG/SMALL Analysis Algorithm: ENABLED (Self-Learning)")
-    print("⏰ Auto-Delete: 3 SECONDS (Dopamine Emojis)")
-    print("🚀 CACHE SYSTEM: ENABLED (Fast Data Access)")
-    print("👑 VIP CANCEL: ENABLED (Super Admin Only)")
-    print("✅ Numbers Fixed: Always Different")
-    print("📝 Professional Style: Simple Text - No Box/Border")
-    print("🏆 Aura Evolution Rank System: ENABLED (80+ Ranks with Sub-Levels)")
-    print("🏅 82 ACHIEVEMENTS: ENABLED (With Rarity System + Ultimate Title)")
-    print("👥 Leaderboard: ENABLED (2 Achievements per player)")
-    print("🎭 Fake Users: ENABLED (Hidden from Players)")
-    print("🎁 Daily Bonus: ENABLED (5-15 Free Wins per day)")
-    print("🔥 Streak System: ENABLED (3,5,7,10 Win Streaks)")
-    print("📜 Prediction History: ENABLED (Last 20 predictions)")
-    print("👥 Referral System: ENABLED")
-    print("🏆 Weekly Rewards: ENABLED (Top 10 get bonuses)")
-    print("📊 Bot Stats Dashboard: ENABLED (Admin only)")
-    print("📊 New Players Stats: ENABLED (Admin/Super Admin)")
-    print("💾 Auto-Backup: ENABLED (Daily)")
-    print("📈 SINGLE LEVEL SYSTEM: ENABLED (Win=Reset to 1, Loss=+1)")
-    print("⏰ 30MIN FAKE PLAYERS: ENABLED (Har 30 min par add)")
-    print("⏰ Auto-Play Increase: ENABLED (Every hour)")
-    print("🔄 Dynamic Top 3: ENABLED (Every 2-4 hours)")
-    print("🎮 PLAY Button: MOVED TO BOTTOM (BIGGER)")
-    print("📋 FULL RANK CHART: ENABLED (BEGINNER to GOD TIER)")
-    print("🔒 CONCURRENT PLAYERS: ENABLED (200+ players simultaneously)")
-    print("🔐 THREAD SAFE: ENABLED (No data corruption)")
-    print("⌨️ KEYBOARD HIDE: ENABLED (During PLAY)")
-    print("📋 APPROVAL LOG: FIXED")
-    print("❌ CANCEL VIP: REMOVED")
-    print("👑 ULTIMATE ACHIEVEMENT SYSTEM: ENABLED (Titles, Milestones, Completionist)")
-    print("📜 COMPLETE HISTORY: ENABLED (Dopamine Hit Stats)")
-    print("✅ SELECT ACHIEVEMENT WITH DONE BUTTON: ENABLED")
-    print("✅ 2 ACHIEVEMENTS PER PLAYER: ENABLED")
-    print("✅ DOPAMINE HIT EMOJIS: 5 WIN + 5 LOSS Variations (3s Auto-Delete)")
-    print("✅ VIP EXPIRE PAR DATA DELETE NAHI HOTA")
-    print("✅ BOT RESTART PAR DATA SAFE RAHEGA")
-    print("✅ 200+ PLAYERS EK SAATH FAST")
-    print("✅ DEVICE TRACKING FIXED")
-    print("✅ NEW PLAYERS STATS FIXED")
-    print("✅ LEADERBOARD FIXED")
-    print("✅ STUDY PANEL: ENABLED (Super Admin Only)")
-    print("✅ BIG/SMALL BUTTONS: REMOVED (Only Numbers)")
-    print("✅ 200+ CONCURRENT PLAYERS: ENABLED")
-    print("✅ GAME LEVEL: REMOVED (Single Level System)")
-    print("👑 SUPER ADMIN PLAY: ENABLED (Sirf SA ka number add hoga)")
-    print("📚 TEACH PANEL: ENABLED (Graph + Numbers List + Tracking)")
-    print("📊 ALGORITHM TRACKING: ENABLED (Instant Add for SA)")
-    print("🎯 752 NUMBERS: ENABLED (Initial Dataset)")
-    print("🎯 4-LEVEL DETECTION: ENABLED (Auto Detect + Change)")
-    print("🔄 AUTO CHANGE: ENABLED (Bar bar aane wale numbers skip honge)")
-    print("👤 VIEW PROFILE: ENABLED (Click player to see profile)")
-    print("🏅 2 ACHIEVEMENT SELECTION: ENABLED")
-    print("📅 TODAY'S ACTIVITY: ENABLED")
-    print("🕐 LAST ACTIVE: ENABLED")
-    print("🎮 ACCUSS VIP: ENABLED (4 Gamer Links + Voice Note - FIXED)")
+    print("🎮 ACCUSS VIP: ENABLED (Links First + Voice After)")
     print("✅ ALL ERRORS FIXED")
     print("=" * 50)
     app.run_polling()
