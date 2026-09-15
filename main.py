@@ -1,5 +1,5 @@
 # ==========================================
-# 🌌 AURA BOT v13.0 - COMPLETE FIXED
+# 🌌 AURA BOT v14.0 - COMPLETE FIXED
 # ==========================================
 
 import logging
@@ -158,6 +158,14 @@ ALGORITHM_HISTORY = [
         "added_by": "System",
         "date": "2026-09-13",
         "status": "active"
+    },
+    {
+        "version": "v14.0",
+        "name": "Profile View + 2 Achievement Selection + Speed Optimization",
+        "description": "Level update fix, rank display, VIEW PROFILE button, full profile view, today's activity, last active, 2 achievement selection, 200+ concurrent players support.",
+        "added_by": "System",
+        "date": "2026-09-15",
+        "status": "active"
     }
 ]
 
@@ -168,33 +176,33 @@ GLOBAL_PERIOD_RESULTS = {}
 USER_PRESS_TRACKER = {}
 
 # ==========================================
-# ⭐ 4-LEVEL DETECTION TRACKER (NEW)
+# ⭐ 4-LEVEL DETECTION TRACKER
 # ==========================================
 LEVEL4_TRACKER = {
-    "consecutive_count": {},      # {number: count} - Kitni baar lagatar aaya
-    "last_number": None,          # Last number jo add hua
-    "skipped_numbers": [],        # Numbers jo skip hue (4+ baar aane par)
-    "detection_log": [],          # Last 50 detections
-    "total_detections": 0         # Total kitni baar detect hua
+    "consecutive_count": {},
+    "last_number": None,
+    "skipped_numbers": [],
+    "detection_log": [],
+    "total_detections": 0
 }
 
 # ==========================================
-# ⭐ ALGORITHM TRACKING (NEW)
+# ⭐ ALGORITHM TRACKING
 # ==========================================
 ALGORITHM_STATS = {
-    "initial_count": 0,          # Pehle kitne numbers the
-    "added_by_super_admin": 0,   # Super Admin ne kitne add kiye
-    "skipped_by_players": 0,     # Normal players ke kitne skip hue
-    "daily_additions": {},       # {"2026-09-12": 5, "2026-09-11": 8}
+    "initial_count": 0,
+    "added_by_super_admin": 0,
+    "skipped_by_players": 0,
+    "daily_additions": {},
     "last_updated": datetime.now().isoformat(),
     "total_added_today": 0,
-    "new_numbers_history": [],   # Last 50 numbers jo add hue
-    "level4_detections": 0,      # 4-level detections count
-    "auto_changes": 0            # Auto changes count
+    "new_numbers_history": [],
+    "level4_detections": 0,
+    "auto_changes": 0
 }
 
 # ==========================================
-# ⭐ CONCURRENT PLAYERS LOCK (OPTIMIZED FOR 100+)
+# ⭐ CONCURRENT PLAYERS LOCK (OPTIMIZED FOR 200+)
 # ==========================================
 USER_LOCKS = {}
 _CACHED_USERS = {}
@@ -203,13 +211,12 @@ _CACHED_PAY = {}
 _CACHED_LAST_SAVE = datetime.now()
 _CACHE_LOCK = asyncio.Lock()
 _SAVE_INTERVAL = 10
+CONCURRENT_SEMAPHORE = asyncio.Semaphore(200)
 
 def get_user_lock(uid):
     if uid not in USER_LOCKS:
         USER_LOCKS[uid] = asyncio.Lock()
     return USER_LOCKS[uid]
-
-CONCURRENT_SEMAPHORE = asyncio.Semaphore(200)
 
 # ==========================================
 # ⭐ CACHED DATA (FAST ACCESS)
@@ -284,50 +291,42 @@ def safe_load_json(filename):
 # ==========================================
 # ⭐ LEVEL SYSTEM - SINGLE LEVEL
 # ==========================================
-# RULE:
-#   Win  → Level = 1 (Reset to 1)
-#   Loss → Level = Level + 1
-
 def calculate_level(current_level, win):
     if win:
         return 1
     else:
         return current_level + 1
 
-# ==========================================
-# ⭐ 4-LEVEL DETECTION SYSTEM (NEW)
-# ==========================================
+def calculate_level_from_plays(wins, losses):
+    """Calculate level from total plays (for fake users)"""
+    total = wins + losses
+    if wins == 0:
+        return 1
+    return max(1, wins // 10)
 
+# ==========================================
+# ⭐ 4-LEVEL DETECTION SYSTEM
+# ==========================================
 def detect_level4_pattern(number):
-    """
-    4-Level Detection:
-    - Agar same number 4 baar lagatar aaya toh detect karo
-    - Return: (detected, should_skip)
-    """
     global LEVEL4_TRACKER
     
     current = int(number)
     last = LEVEL4_TRACKER.get("last_number")
     
-    # Same number aaya?
     if last == current:
-        # Count badhao
         if current not in LEVEL4_TRACKER["consecutive_count"]:
             LEVEL4_TRACKER["consecutive_count"][current] = 1
         LEVEL4_TRACKER["consecutive_count"][current] += 1
     else:
-        # Reset karo (naya number aaya)
         LEVEL4_TRACKER["consecutive_count"] = {current: 1}
     
     LEVEL4_TRACKER["last_number"] = current
     count = LEVEL4_TRACKER["consecutive_count"].get(current, 1)
     
-    # 4-level detection: Agar 4+ baar lagatar aaya
     if count >= 4:
         LEVEL4_TRACKER["total_detections"] += 1
         ALGORITHM_STATS["level4_detections"] += 1
         
-        # Log karo
         detection = {
             "number": current,
             "count": count,
@@ -338,20 +337,10 @@ def detect_level4_pattern(number):
         if len(LEVEL4_TRACKER["detection_log"]) > 50:
             LEVEL4_TRACKER["detection_log"].pop(0)
         
-        logger.info(f"⚠️ 4-LEVEL DETECTED! Number {current} aaya {count} baar lagatar. Next time skip karega.")
-        return True, True  # detected, should_skip
+        logger.info(f"⚠️ 4-LEVEL DETECTED! Number {current} aaya {count} baar lagatar.")
+        return True, True
     
     return False, False
-
-def get_level4_status():
-    """4-Level detection ka status"""
-    return {
-        "total_detections": LEVEL4_TRACKER["total_detections"],
-        "auto_changes": ALGORITHM_STATS["auto_changes"],
-        "current_consecutive": LEVEL4_TRACKER["consecutive_count"],
-        "last_number": LEVEL4_TRACKER["last_number"],
-        "recent_detections": LEVEL4_TRACKER["detection_log"][-5:]
-    }
 
 # ==========================================
 # ⭐ DAILY BONUS SYSTEM
@@ -698,51 +687,6 @@ def check_achievements(uid, users, stats):
     return unlocked
 
 # ==========================================
-# ⭐ CHALLENGE MODE
-# ==========================================
-CHALLENGES = [
-    {"name": "Win 3 in a row", "reward": 10, "type": "streak", "target": 3},
-    {"name": "Win 5 in a row", "reward": 20, "type": "streak", "target": 5},
-    {"name": "Win 10 in a row", "reward": 50, "type": "streak", "target": 10},
-    {"name": "Get 10 wins", "reward": 15, "type": "wins", "target": 10},
-    {"name": "Get 25 wins", "reward": 30, "type": "wins", "target": 25},
-    {"name": "Get 50 wins", "reward": 75, "type": "wins", "target": 50},
-    {"name": "Play 25 games", "reward": 20, "type": "games", "target": 25},
-    {"name": "Play 50 games", "reward": 40, "type": "games", "target": 50},
-    {"name": "Play 100 games", "reward": 100, "type": "games", "target": 100},
-]
-
-CHALLENGE_TRACKER = {}
-
-def check_challenges(uid, win, total_plays):
-    if uid not in CHALLENGE_TRACKER:
-        CHALLENGE_TRACKER[uid] = {'streak': 0, 'wins': 0, 'games': 0}
-    
-    CHALLENGE_TRACKER[uid]['games'] += 1
-    if win:
-        CHALLENGE_TRACKER[uid]['streak'] += 1
-        CHALLENGE_TRACKER[uid]['wins'] += 1
-    else:
-        CHALLENGE_TRACKER[uid]['streak'] = 0
-    
-    completed = []
-    for challenge in CHALLENGES:
-        if challenge['type'] == 'streak' and CHALLENGE_TRACKER[uid]['streak'] >= challenge['target']:
-            if not CHALLENGE_TRACKER[uid].get(f'completed_{challenge["name"]}', False):
-                CHALLENGE_TRACKER[uid][f'completed_{challenge["name"]}'] = True
-                completed.append(challenge)
-        elif challenge['type'] == 'wins' and CHALLENGE_TRACKER[uid]['wins'] >= challenge['target']:
-            if not CHALLENGE_TRACKER[uid].get(f'completed_{challenge["name"]}', False):
-                CHALLENGE_TRACKER[uid][f'completed_{challenge["name"]}'] = True
-                completed.append(challenge)
-        elif challenge['type'] == 'games' and CHALLENGE_TRACKER[uid]['games'] >= challenge['target']:
-            if not CHALLENGE_TRACKER[uid].get(f'completed_{challenge["name"]}', False):
-                CHALLENGE_TRACKER[uid][f'completed_{challenge["name"]}'] = True
-                completed.append(challenge)
-    
-    return completed
-
-# ==========================================
 # ⭐ WEEKLY REWARDS
 # ==========================================
 WEEKLY_REWARDS_TRACKER = {}
@@ -827,8 +771,31 @@ def add_to_history(uid, period, number, trend, result):
         'time': datetime.now().isoformat()
     })
     
-    if len(HISTORY_TRACKER[uid]) > 50:
+    if len(HISTORY_TRACKER[uid]) > 100:
         HISTORY_TRACKER[uid].pop(0)
+
+def get_today_activity(uid):
+    today = datetime.now().date().isoformat()
+    today_plays = 0
+    today_wins = 0
+    today_losses = 0
+    
+    if uid in HISTORY_TRACKER:
+        for entry in HISTORY_TRACKER[uid]:
+            entry_date = entry.get('time', '')[:10]
+            if entry_date == today:
+                today_plays += 1
+                if entry.get('result') == 'WIN':
+                    today_wins += 1
+                else:
+                    today_losses += 1
+    
+    return {
+        'plays': today_plays,
+        'wins': today_wins,
+        'losses': today_losses,
+        'win_rate': (today_wins / today_plays * 100) if today_plays > 0 else 0
+    }
 
 async def show_history(update, context):
     uid = str(update.effective_user.id)
@@ -1102,7 +1069,6 @@ def start_auto_backup():
 # ==========================================
 # ⭐ AUTO-PLAY INCREASE SYSTEM
 # ==========================================
-
 AUTO_PLAY_TRACKER = {}
 
 async def auto_increase_plays():
@@ -1117,6 +1083,7 @@ async def auto_increase_plays():
                     increase = random.randint(1, 5)
                     user_data['win_count'] = user_data.get('win_count', 0) + random.randint(0, increase)
                     user_data['loss_count'] = user_data.get('loss_count', 0) + random.randint(0, increase)
+                    user_data['level'] = calculate_level_from_plays(user_data['win_count'], user_data['loss_count'])
             
             await safe_save_json("users.json", users)
             logger.info("✅ Auto-play increase completed!")
@@ -1138,7 +1105,6 @@ def start_auto_play_increase():
 # ==========================================
 # ⭐ DYNAMIC TOP 3 SYSTEM
 # ==========================================
-
 TOP3_TRACKER = {}
 
 async def dynamic_top3_update():
@@ -1173,6 +1139,7 @@ async def dynamic_top3_update():
                 
                 user_data['win_count'] = new_wins
                 user_data['loss_count'] = new_losses
+                user_data['level'] = calculate_level_from_plays(new_wins, new_losses)
                 user_data['rank_level'] = get_aura_rank(new_total)['level']
                 
                 users[uid] = user_data
@@ -1257,6 +1224,7 @@ async def add_fake_players_every_30min():
                     losses = random.randint(1, 10)
                     total_plays = wins + losses
                     rank_data = get_aura_rank(total_plays)
+                    level = calculate_level_from_plays(wins, losses)
                     
                     unlocked_achievements = []
                     if total_plays >= 1:
@@ -1286,7 +1254,7 @@ async def add_fake_players_every_30min():
                         "joined": str(datetime.now()),
                         "win_count": wins,
                         "loss_count": losses,
-                        "level": 1,
+                        "level": level,
                         "rank_level": rank_data["level"],
                         "previous_rank": None,
                         "device_id": f"dev_{random.randint(1000,9999)}",
@@ -1295,7 +1263,9 @@ async def add_fake_players_every_30min():
                         "free_trial_expiry": None,
                         "is_fake": True,
                         "last_active": datetime.now().isoformat(),
-                        "achievements": {"unlocked": unlocked_achievements}
+                        "achievements": {"unlocked": unlocked_achievements},
+                        "selected_achievement_1": None,
+                        "selected_achievement_2": None
                     }
                     added += 1
             
@@ -1320,7 +1290,6 @@ def start_fake_players_30min():
 # ==========================================
 # ⭐ BIG/SMALL ANALYSIS ALGORITHM
 # ==========================================
-
 def get_size(number):
     try:
         number = int(number)
@@ -1333,9 +1302,8 @@ def get_size(number):
     return None
 
 # ==========================================
-# ⭐ HISTORICAL DATA - 752 RESULTS (NEW)
+# ⭐ HISTORICAL DATA - 752 RESULTS
 # ==========================================
-
 HISTORICAL_RESULTS = [
     5, 9, 6, 2, 4, 6, 0, 2, 0, 2,
     1, 3, 7, 3, 3, 8, 2, 7, 1, 1,
@@ -1421,7 +1389,6 @@ CLASSIFIED_RESULTS = [
     for num in HISTORICAL_RESULTS
 ]
 
-# ✅ INITIALIZE ALGORITHM STATS
 ALGORITHM_STATS["initial_count"] = len(HISTORICAL_RESULTS)
 
 def get_statistics():
@@ -1430,9 +1397,8 @@ def get_statistics():
     return {"BIG": big_count, "SMALL": small_count}
 
 # ==========================================
-# ⭐ HISTORICAL ANALYSIS ALGORITHM - SELF LEARNING
+# ⭐ HISTORICAL ANALYSIS ALGORITHM
 # ==========================================
-
 def get_next_numbers_after(current_number):
     current = int(current_number)
     next_numbers = []
@@ -1487,27 +1453,17 @@ def get_prediction_with_analysis(current_number):
         'message': f"✅ Found {len(sorted_candidates)} unique numbers after {current}"
     }
 
-# ✅ UPDATED: Only Super Admin numbers add + 4-Level Detection
 def add_result_to_history(number, is_super_admin=False):
-    """
-    Algorithm mein number add karo
-    - Sirf Super Admin ka number add hoga
-    - Normal player ka number add NAHI hoga
-    - 4-Level Detection: Agar same number 4 baar lagatar aaya toh detect
-    """
     try:
         num = int(number)
         if 0 <= num <= 9:
             if is_super_admin:
-                # ✅ 4-LEVEL DETECTION CHECK
                 detected, should_skip = detect_level4_pattern(num)
                 
                 if detected:
                     logger.info(f"⚠️ 4-LEVEL DETECTED for {num}! Auto-change activated.")
                     ALGORITHM_STATS["auto_changes"] += 1
                     
-                    # Skip karo - yeh number bar bar aa raha hai
-                    # Alternative number use karo
                     alternative = random.randint(0, 9)
                     while alternative == num:
                         alternative = random.randint(0, 9)
@@ -1524,7 +1480,6 @@ def add_result_to_history(number, is_super_admin=False):
                     HISTORICAL_RESULTS.pop(0)
                     CLASSIFIED_RESULTS.pop(0)
                 
-                # ✅ TRACK: Super Admin added
                 ALGORITHM_STATS["added_by_super_admin"] += 1
                 today = datetime.now().date().isoformat()
                 if today not in ALGORITHM_STATS["daily_additions"]:
@@ -1532,7 +1487,6 @@ def add_result_to_history(number, is_super_admin=False):
                 ALGORITHM_STATS["daily_additions"][today] += 1
                 ALGORITHM_STATS["last_updated"] = datetime.now().isoformat()
                 
-                # ✅ Add to history list
                 ALGORITHM_STATS["new_numbers_history"].append({
                     "number": num,
                     "size": "BIG" if num >= 5 else "SMALL",
@@ -1545,9 +1499,8 @@ def add_result_to_history(number, is_super_admin=False):
                 logger.info(f"✅ Super Admin number added to algorithm: {num}")
                 return True
             else:
-                # Normal player ka number add nahi hoga
                 ALGORITHM_STATS["skipped_by_players"] += 1
-                logger.info(f"⚠️ Normal player number SKIPPED (not added to algorithm): {num}")
+                logger.info(f"⚠️ Normal player number SKIPPED: {num}")
                 return False
     except:
         pass
@@ -1605,7 +1558,6 @@ def get_analysis_report():
 # ==========================================
 # ⭐ AURA EVOLUTION RANK SYSTEM
 # ==========================================
-
 AURA_RANKS = [
     {"level": 0, "emoji": "😅", "rank": "BEGINNER I", "tagline": "🔰 First Step", "required": 5},
     {"level": 1, "emoji": "🙂", "rank": "BEGINNER II", "tagline": "🌱 Learning", "required": 10},
@@ -1740,7 +1692,6 @@ def format_progress_bar(percent, length=12):
 # ==========================================
 # ⭐ FAKE USERS DATA
 # ==========================================
-
 FAKE_USERS = [
     {"name": "Manoj Tiwari", "username": "manoj_tiwari", "win": 12, "loss": 8},
     {"name": "Arjun Mehta", "username": "arjun_mehta", "win": 10, "loss": 6},
@@ -1784,6 +1735,7 @@ def initialize_fake_users():
             wins = fake["win"]
             losses = fake["loss"]
             rank_data = get_aura_rank(total_plays)
+            level = calculate_level_from_plays(wins, losses)
             
             unlocked_achievements = []
             
@@ -1842,7 +1794,7 @@ def initialize_fake_users():
                 "joined": str(datetime.now() - timedelta(days=random.randint(1, 30))),
                 "win_count": wins,
                 "loss_count": losses,
-                "level": 1,
+                "level": level,
                 "rank_level": rank_data["level"],
                 "previous_rank": None,
                 "device_id": f"dev_{random.randint(1000,9999)}",
@@ -1851,7 +1803,9 @@ def initialize_fake_users():
                 "free_trial_expiry": None,
                 "is_fake": True,
                 "last_active": random.choice(FAKE_TIMESTAMPS),
-                "achievements": {"unlocked": unlocked_achievements}
+                "achievements": {"unlocked": unlocked_achievements},
+                "selected_achievement_1": None,
+                "selected_achievement_2": None
             }
             fake_added += 1
     
@@ -1990,21 +1944,6 @@ def get_user_details(update):
         "device_id": get_device_id(update)
     }
 
-def calculate_remaining(expiry_str):
-    if not expiry_str or expiry_str == 'N/A':
-        return 'N/A'
-    try:
-        expiry = datetime.fromisoformat(expiry_str)
-        remaining = (expiry - datetime.now()).total_seconds()
-        if remaining > 0:
-            hours = int(remaining // 3600)
-            minutes = int((remaining % 3600) // 60)
-            return f"{hours}h {minutes}m"
-        else:
-            return "Expired"
-    except:
-        return "N/A"
-
 async def auto_delete_message(context, chat_id, message_id, delay=3):
     try:
         await asyncio.sleep(delay)
@@ -2021,7 +1960,7 @@ async def send_and_auto_delete(update, context, text, delay=3, parse_mode=None, 
         logger.error(f"Send and auto delete error: {e}")
         return None
 
-# ✅ ========== DOPAMINE HIT EMOJIS (WIN - 5 VARIATIONS) ==========
+# ✅ DOPAMINE HIT EMOJIS
 WIN_DOPAMINE = [
     """
 🎉🎊🎉 *YOU'RE A LEGEND!* 🎉🎊🎉
@@ -2084,15 +2023,6 @@ def get_random_win_emoji():
 def get_random_loss_emoji():
     return random.choice(LOSS_DOPAMINE)
 
-WIN_STICKERS = WIN_DOPAMINE
-LOSS_STICKERS = LOSS_DOPAMINE
-
-def get_random_win_sticker():
-    return get_random_win_emoji()
-
-def get_random_loss_sticker():
-    return get_random_loss_emoji()
-
 def load(f):
     if os.path.exists(f):
         with open(f, 'r') as x:
@@ -2133,17 +2063,6 @@ def save_result(user_id, period, number, size):
     except Exception as e:
         logger.error(f"Database error: {e}")
 
-def get_user_history(user_id, limit=10):
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        c.execute("SELECT number, size FROM results WHERE user_id = ? ORDER BY timestamp DESC LIMIT ?", (user_id, limit))
-        rows = c.fetchall()
-        conn.close()
-        return rows
-    except:
-        return []
-
 def find_qr():
     paths = ["qr.jpg", "assets/qr.jpg", "VidMate/assets/qr.jpg", "/storage/emulated/0/qr.jpg"]
     for p in paths:
@@ -2159,28 +2078,6 @@ def get_admin_buttons(req_id):
         [InlineKeyboardButton("✅ APPROVE", callback_data=f"app_{req_id}"),
          InlineKeyboardButton("❌ REJECT", callback_data=f"rej_{req_id}")]
     ])
-
-def get_emoji():
-    return random.choice(["🎯", "🔥", "⭐", "💎", "🏆", "👑", "🚀"])
-
-def get_loss_emoji():
-    return random.choice(["😅", "🥲", "😊", "🙂", "😌"])
-
-async def show_loading(update, context, steps=None):
-    if steps is None:
-        steps = [
-            "🔍 ANALYZING...\n├─ █░░░░░░░░░ 10%\n└─ Scanning patterns...",
-            "🔍 ANALYZING...\n├─ ████░░░░░░ 40%\n└─ Processing data...",
-            "🔍 ANALYZING...\n├─ ████████░░ 80%\n└─ Generating results...",
-            "🔍 ANALYZING...\n├─ ██████████ 100% ✅\n└─ Complete!"
-        ]
-    
-    msg = await update.message.reply_text(steps[0])
-    for i in range(1, len(steps)):
-        await asyncio.sleep(0.3)
-        await msg.edit_text(steps[i])
-    await asyncio.sleep(0.2)
-    await msg.delete()
 
 async def send_typing(context, chat_id):
     try:
@@ -2214,7 +2111,6 @@ admin_menu = ReplyKeyboardMarkup([
     ["🔙 BACK"]
 ], resize_keyboard=True)
 
-# ✅ SUPER ADMIN MENU - NEW BUTTONS ADDED
 super_admin_menu = ReplyKeyboardMarkup([
     ["📊 STATS", "💰 PAYMENTS"],
     ["📢 BROADCAST", "📅 PAYMENT HISTORY"],
@@ -2225,7 +2121,6 @@ super_admin_menu = ReplyKeyboardMarkup([
     ["🔙 BACK"]
 ], resize_keyboard=True)
 
-# ✅ SUPER ADMIN PLAY MENU
 super_admin_play_menu = ReplyKeyboardMarkup([
     ["0️⃣", "1️⃣", "2️⃣", "3️⃣", "4️⃣"],
     ["5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣"],
@@ -2249,8 +2144,6 @@ result_keyboard = ReplyKeyboardMarkup([
     ["5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣"],
     ["⏱ TIMER", "🏠 HOME"]
 ], resize_keyboard=True)
-
-start_button_menu = ReplyKeyboardMarkup([["🚀 START 🚀"]], resize_keyboard=True)
 
 profile_menu = ReplyKeyboardMarkup([
     ["🏆 ACHIEVEMENTS"],
@@ -2437,7 +2330,6 @@ async def teach_panel(update, context):
         else:
             numbers_list = "├─ No numbers added yet\n"
         
-        # ✅ 4-LEVEL STATUS
         level4_detections = ALGORITHM_STATS.get("level4_detections", 0)
         auto_changes = ALGORITHM_STATS.get("auto_changes", 0)
         
@@ -2569,7 +2461,7 @@ async def teach_callback(update, context):
             
             msg += f"""
 ━━━━━━━━━━━━━━━━━━━━━━
-💡 *Algorithm Version:* v13.0
+💡 *Algorithm Version:* v14.0
 🕐 *Last Update:* {ALGORITHM_STATS.get('last_updated', 'N/A')[:16]}
 """
             
@@ -2690,7 +2582,6 @@ async def teach_panel_callback(update, context):
 # ==========================================
 # ⭐ STUDY SYSTEM (SUPER ADMIN ONLY)
 # ==========================================
-
 async def study_panel(update, context):
     try:
         uid = int(update.effective_user.id)
@@ -2807,10 +2698,12 @@ async def study_callback(update, context):
 ├─ ⏰ 30min Fake Players Add: ✅ Active
 ├─ 🏆 2 Achievements Display: ✅ Active
 ├─ 👑 Super Admin Only Add: ✅ Active
-└─ 👥 100+ Concurrent Players: ✅ Active
+├─ 👤 Profile View: ✅ Active
+├─ 📅 Today's Activity: ✅ Active
+└─ 👥 200+ Concurrent Players: ✅ Active
 
 ━━━━━━━━━━━━━━━━━━━━━━
-💡 *Algorithm Version:* v13.0
+💡 *Algorithm Version:* v14.0
 🕐 *Last Updated:* {datetime.now().strftime('%Y-%m-%d %H:%M')}
 """
             
@@ -2826,10 +2719,10 @@ async def study_callback(update, context):
 ━━━━━━━━━━━━━━━━━━━━━━
 
 📌 *Latest Algorithm Added:*
-🔹 *v13.0 - 752 Numbers + 4-Level Detection + Auto Change*
+🔹 *v14.0 - Profile View + 2 Achievement Selection + Speed Optimization*
 
 📝 *Description:*
-752 numbers add kiye gaye. 4-Level Detection algorithm: Agar same number 4 baar lagatar aaye toh auto detect + change. Bar bar aane wale numbers ko skip karega.
+Level update fix, rank display, VIEW PROFILE button, full profile view, today's activity, last active, 2 achievement selection, 200+ concurrent players support.
 
 ━━━━━━━━━━━━━━━━━━━━━━
 📊 *PREVIOUS VERSIONS:*
@@ -2926,7 +2819,6 @@ async def study_callback(update, context):
 # ==========================================
 # ⭐ NEW PLAYERS STATS
 # ==========================================
-
 async def new_players_stats(update, context):
     try:
         uid = int(update.effective_user.id)
@@ -3024,7 +2916,6 @@ async def new_players_stats(update, context):
 # ==========================================
 # ⭐ SUPER ADMIN - VIP CANCEL
 # ==========================================
-
 async def cancel_vip(update, context):
     try:
         uid = int(update.effective_user.id)
@@ -3101,7 +2992,6 @@ async def cancel_vip(update, context):
 # ==========================================
 # ⭐ DEVICE TRACKING
 # ==========================================
-
 async def device_tracking(update, context):
     try:
         uid = int(update.effective_user.id)
@@ -3436,7 +3326,10 @@ async def start(update, context):
                 "language_code": device_info["language_code"],
                 "achievements": {"unlocked": []},
                 "selected_achievement": None,
-                "selected_achievement_saved": False
+                "selected_achievement_saved": False,
+                "selected_achievement_1": None,
+                "selected_achievement_2": None,
+                "last_active": datetime.now().isoformat()
             }
             await safe_save_json("users.json", users)
             logger.info(f"✅ New user created with device tracking: {uid}")
@@ -3479,6 +3372,7 @@ async def start_button(update, context):
                 users[uid]['win_count'] = 0
                 users[uid]['loss_count'] = 0
                 users[uid]['level'] = 1
+                users[uid]['last_active'] = datetime.now().isoformat()
                 await safe_save_json("users.json", users)
         
         await send_typing(context, update.effective_chat.id)
@@ -3534,7 +3428,8 @@ async def handle_photo(update, context):
         uid = str(update.effective_user.id)
         if not context.user_data.get('waiting_payment') and not context.user_data.get('waiting'):
             await update.message.reply_text("❌ Use MEMBERSHIP first!", reply_markup=main_menu)
-            return        
+            return
+        
         steps = [
             "📤 UPLOADING...\n├─ █░░░░░░░░░ 10%\n└─ Connecting to server...",
             "📤 UPLOADING...\n├─ ████░░░░░░ 40%\n└─ Processing image...",
@@ -3576,7 +3471,6 @@ async def handle_photo(update, context):
 # ==========================================
 # ⭐ CALLBACK HANDLER
 # ==========================================
-
 async def callback(update, context):
     try:
         query = update.callback_query
@@ -3594,6 +3488,18 @@ async def callback(update, context):
         
         if data.startswith("teach_"):
             await teach_callback(update, context)
+            return
+        
+        if data.startswith("view_profile_"):
+            await view_player_profile_callback(update, context)
+            return
+        
+        if data.startswith("select_1_"):
+            await select_achievement_1_callback(update, context)
+            return
+        
+        if data.startswith("select_2_"):
+            await select_achievement_2_callback(update, context)
             return
         
         if data.startswith("app_"):
@@ -3632,15 +3538,201 @@ async def callback(update, context):
             await teach_callback(update, context)
         elif data == "teach_back":
             await teach_panel_callback(update, context)
+        elif data == "back_to_leaderboard":
+            await back_to_leaderboard_callback(update, context)
+        elif data == "select_achievements":
+            await select_achievements_menu(update, context)
+        elif data == "save_achievements":
+            await save_achievements_callback(update, context)
+        elif data == "back_to_profile_from_ach":
+            await back_to_profile_callback(update, context)
             
     except Exception as e:
         logger.error(f"Callback error: {e}")
 
 # ==========================================
-# ⭐ ACHIEVEMENT SELECTION
+# ⭐ VIEW PLAYER PROFILE
 # ==========================================
+async def view_player_profile_callback(update, context):
+    try:
+        query = update.callback_query
+        await query.answer()
+        
+        uid = query.data.replace("view_profile_", "")
+        users = safe_load_json("users.json")
+        
+        if uid not in users:
+            await query.edit_message_text("❌ Player not found!")
+            return
+        
+        user = users[uid]
+        username = user.get('username', 'Unknown')
+        win = user.get('win_count', 0)
+        loss = user.get('loss_count', 0)
+        level = user.get('level', 1)
+        total_plays = win + loss
+        rank_data = get_aura_rank(total_plays)
+        
+        today_activity = get_today_activity(uid)
+        
+        last_active = user.get('last_active', 'N/A')
+        if last_active and last_active != 'N/A':
+            try:
+                last_active = datetime.fromisoformat(last_active).strftime('%Y-%m-%d %I:%M %p')
+            except:
+                pass
+        
+        streak = STREAK_TRACKER.get(uid, {}).get('streak', 0)
+        max_streak = STREAK_TRACKER.get(uid, {}).get('max_streak', 0)
+        
+        ach_stats = get_achievement_stats(uid)
+        
+        msg = f"""
+👤 *PLAYER PROFILE*
+━━━━━━━━━━━━━━━━━━━━━━
 
-async def view_achievements_callback(update, context):
+📛 *Username:* @{username}
+
+━━━━━━━━━━━━━━━━━━━━━━
+📊 *STATS*
+├─ 🏆 Total Wins: {win}
+├─ ❌ Total Losses: {loss}
+├─ 📈 Total Plays: {total_plays}
+└─ 📊 Win Rate: {(win/total_plays*100) if total_plays > 0 else 0:.1f}%
+
+━━━━━━━━━━━━━━━━━━━━━━
+🎖️ *RANK & LEVEL*
+├─ {rank_data['emoji']} {rank_data['rank']}
+├─ 📈 Level: {level}
+└─ 🚀 Next: {get_next_rank(total_plays)['rank'] if get_next_rank(total_plays) else '🏆 MAX'}
+
+━━━━━━━━━━━━━━━━━━━━━━
+🔥 *STREAKS*
+├─ 🔥 Current: {streak} wins
+└─ 👑 Best: {max_streak} wins
+
+━━━━━━━━━━━━━━━━━━━━━━
+📅 *TODAY'S ACTIVITY*
+├─ 🏆 Today Wins: {today_activity['wins']}
+├─ ❌ Today Losses: {today_activity['losses']}
+├─ 📊 Today Plays: {today_activity['plays']}
+└─ 📈 Today Win Rate: {today_activity['win_rate']:.1f}%
+
+━━━━━━━━━━━━━━━━━━━━━━
+🏅 *ACHIEVEMENTS* ({ach_stats['unlocked']}/{ach_stats['total']})
+"""
+        unlocked = ach_stats['unlocked_list'][:5]
+        for ach in unlocked:
+            rarity = ACHIEVEMENTS.get(ach, {}).get('rarity', 'common')
+            emoji = get_rarity_emoji(rarity)
+            msg += f"├─ {ach} {emoji}\n"
+        
+        if ach_stats['unlocked'] > 5:
+            msg += f"└─ ... and {ach_stats['unlocked'] - 5} more\n"
+        
+        msg += f"""
+━━━━━━━━━━━━━━━━━━━━━━
+🕐 *Last Active:* {last_active}
+━━━━━━━━━━━━━━━━━━━━━━
+"""
+        
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅ BACK TO LEADERBOARD", callback_data="back_to_leaderboard")]
+        ])
+        
+        await query.edit_message_text(msg, parse_mode='Markdown', reply_markup=keyboard)
+        
+    except Exception as e:
+        logger.error(f"View player profile error: {e}")
+        await query.edit_message_text("❌ Error loading profile!")
+
+async def back_to_leaderboard_callback(update, context):
+    try:
+        query = update.callback_query
+        await query.answer()
+        
+        users = safe_load_json("users.json")
+        all_users = get_leaderboard_users()
+        top_10 = all_users[:10]
+        
+        msg = f"""
+🏆 *AURA LEADERBOARD*
+━━━━━━━━━━━━━━━━━━━━━━
+"""
+        medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
+        
+        keyboard = []
+        
+        for i, user in enumerate(top_10):
+            medal = medals[i] if i < len(medals) else f"{i+1}."
+            name = user["username"] if user["username"] != "Unknown" else user["name"]
+            level = user.get('level', 1)
+            total = user.get('total', 0)
+            rank_emoji = user.get('rank_emoji', '')
+            rank_name = user.get('rank_name', '')
+            
+            msg += f"""
+{medal} *{name}*
+   📊 {total} Plays • Level {level}
+   🎖️ {rank_emoji} {rank_name}
+"""
+            
+            unlocked = users.get(user["id"], {}).get('achievements', {}).get('unlocked', [])
+            selected_1 = users.get(user["id"], {}).get('selected_achievement_1', None)
+            selected_2 = users.get(user["id"], {}).get('selected_achievement_2', None)
+            has_saved = users.get(user["id"], {}).get('selected_achievement_saved', False)
+            
+            if has_saved and selected_1 and selected_2 and selected_1 in unlocked and selected_2 in unlocked:
+                r1 = ACHIEVEMENTS.get(selected_1, {}).get('rarity', 'common')
+                r2 = ACHIEVEMENTS.get(selected_2, {}).get('rarity', 'common')
+                msg += f"""
+   ═══ ACHIEVEMENTS ═══
+   🏅 {selected_1} {get_rarity_emoji(r1)}
+   🏅 {selected_2} {get_rarity_emoji(r2)}
+"""
+            else:
+                rare = get_rare_achievements(unlocked)
+                if len(rare) >= 2:
+                    sel = random.sample(rare, 2)
+                    msg += f"""
+   ═══ ACHIEVEMENTS ═══
+"""
+                    for a, r in sel:
+                        msg += f"   🏅 {a} {get_rarity_emoji(r)}\n"
+                elif len(unlocked) >= 2:
+                    sel = random.sample(unlocked, 2)
+                    msg += f"""
+   ═══ ACHIEVEMENTS ═══
+"""
+                    for a in sel:
+                        r = ACHIEVEMENTS.get(a, {}).get('rarity', 'common')
+                        msg += f"   🏅 {a} {get_rarity_emoji(r)}\n"
+                elif len(unlocked) == 1:
+                    r = ACHIEVEMENTS.get(unlocked[0], {}).get('rarity', 'common')
+                    msg += f"""
+   ═══ ACHIEVEMENTS ═══
+   🏅 {unlocked[0]} {get_rarity_emoji(r)}
+"""
+            
+            keyboard.append([InlineKeyboardButton(f"👤 {name}", callback_data=f"view_profile_{user['id']}")])
+        
+        msg += f"""
+━━━━━━━━━━━━━━━━━━━━━━
+👥 Total Players: {len(all_users)}
+💡 Rank changes every hour! ⏰
+"""
+        
+        keyboard.append([InlineKeyboardButton("🏠 HOME", callback_data="back_home")])
+        
+        await query.edit_message_text(msg, parse_mode='Markdown', reply_markup=InlineKeyboardMarkup(keyboard))
+        
+    except Exception as e:
+        logger.error(f"Back to leaderboard error: {e}")
+
+# ==========================================
+# ⭐ ACHIEVEMENT SELECTION (2 ACHIEVEMENTS)
+# ==========================================
+async def select_achievements_menu(update, context):
     try:
         query = update.callback_query
         await query.answer()
@@ -3653,61 +3745,60 @@ async def view_achievements_callback(update, context):
             return
         
         unlocked = users[uid].get('achievements', {}).get('unlocked', [])
-        selected = users[uid].get('selected_achievement', None)
-        is_saved = users[uid].get('selected_achievement_saved', False)
+        selected_1 = users[uid].get('selected_achievement_1', None)
+        selected_2 = users[uid].get('selected_achievement_2', None)
         
         if not unlocked:
             await query.edit_message_text(
-                "🏅 *NO ACHIEVEMENTS UNLOCKED*\n━━━━━━━━━━━━━━━━━━━━━━\n\nStart playing to unlock achievements!\n💪 Play your first game to begin.",
+                "🏅 *NO ACHIEVEMENTS UNLOCKED*\n━━━━━━━━━━━━━━━━━━━━━━\n\nStart playing to unlock achievements!",
                 parse_mode='Markdown'
             )
             return
         
-        status_text = "✅ SAVED" if is_saved else "⚠️ NOT SAVED (Click DONE to save)"
-        selected_display = f"✅ {selected}" if selected else "❌ None Selected"
-        
         msg = f"""
-🏅 *YOUR ACHIEVEMENTS* ({len(unlocked)}/82)
+🏅 *SELECT YOUR 2 ACHIEVEMENTS*
 ━━━━━━━━━━━━━━━━━━━━━━
 
-📌 *SELECTED:* {selected_display}
-📌 *STATUS:* {status_text}
+📌 *SELECTED 1:* {selected_1 if selected_1 else '❌ None'}
+📌 *SELECTED 2:* {selected_2 if selected_2 else '❌ None'}
 
-📋 *Unlocked Achievements:*
+━━━━━━━━━━━━━━━━━━━━━━
+📋 *Click to select:*
 """
         
         keyboard = []
         
-        for ach in unlocked:
+        for ach in unlocked[:20]:
             rarity = ACHIEVEMENTS.get(ach, {}).get('rarity', 'common')
             emoji = get_rarity_emoji(rarity)
-            is_selected = "✅" if ach == selected else "⬜"
-            msg += f"\n{is_selected} {ach} {emoji}"
-            keyboard.append([InlineKeyboardButton(f"SELECT {ach}", callback_data=f"select_ach_{ach}")])
+            is_s1 = "1️⃣" if ach == selected_1 else ""
+            is_s2 = "2️⃣" if ach == selected_2 else ""
+            msg += f"\n{is_s1}{is_s2} {ach} {emoji}"
+            keyboard.append([InlineKeyboardButton(f"1️⃣ {ach}", callback_data=f"select_1_{ach}")])
+            keyboard.append([InlineKeyboardButton(f"2️⃣ {ach}", callback_data=f"select_2_{ach}")])
         
         msg += """
 ━━━━━━━━━━━━━━━━━━━━━━
-💡 Click SELECT to choose an achievement
-💡 Then click DONE to save it to your profile!
+💡 Click 1️⃣ to select as Achievement 1
+💡 Click 2️⃣ to select as Achievement 2
+💡 Then click SAVE
 """
         
-        keyboard.append([InlineKeyboardButton("✅ DONE - SAVE TO PROFILE", callback_data="save_selected_achievement")])
-        keyboard.append([InlineKeyboardButton("⬅ BACK TO PROFILE", callback_data="back_profile")])
+        keyboard.append([InlineKeyboardButton("✅ SAVE", callback_data="save_achievements")])
+        keyboard.append([InlineKeyboardButton("⬅ BACK", callback_data="back_profile")])
         
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text(msg, parse_mode='Markdown', reply_markup=reply_markup)
+        await query.edit_message_text(msg, parse_mode='Markdown', reply_markup=InlineKeyboardMarkup(keyboard))
         
     except Exception as e:
-        logger.error(f"View achievements callback error: {e}")
-        await query.edit_message_text("❌ Error loading achievements!", reply_markup=main_menu)
+        logger.error(f"Select achievements menu error: {e}")
 
-async def select_achievement_callback(update, context):
+async def select_achievement_1_callback(update, context):
     try:
         query = update.callback_query
         await query.answer()
         
         uid = str(query.from_user.id)
-        ach_name = query.data.replace("select_ach_", "")
+        ach_name = query.data.replace("select_1_", "")
         
         users = safe_load_json("users.json")
         
@@ -3718,20 +3809,46 @@ async def select_achievement_callback(update, context):
         unlocked = users[uid].get('achievements', {}).get('unlocked', [])
         
         if ach_name not in unlocked:
-            await query.edit_message_text("❌ This achievement is not unlocked yet!")
+            await query.edit_message_text("❌ Not unlocked yet!")
             return
         
-        users[uid]['selected_achievement'] = ach_name
-        users[uid]['selected_achievement_saved'] = False
+        users[uid]['selected_achievement_1'] = ach_name
         await safe_save_json("users.json", users)
         
-        await view_achievements_callback(update, context)
+        await select_achievements_menu(update, context)
         
     except Exception as e:
-        logger.error(f"Select achievement callback error: {e}")
-        await query.edit_message_text("❌ Error selecting achievement!", reply_markup=main_menu)
+        logger.error(f"Select achievement 1 error: {e}")
 
-async def save_selected_achievement_callback(update, context):
+async def select_achievement_2_callback(update, context):
+    try:
+        query = update.callback_query
+        await query.answer()
+        
+        uid = str(query.from_user.id)
+        ach_name = query.data.replace("select_2_", "")
+        
+        users = safe_load_json("users.json")
+        
+        if uid not in users:
+            await query.edit_message_text("❌ Please /start first!")
+            return
+        
+        unlocked = users[uid].get('achievements', {}).get('unlocked', [])
+        
+        if ach_name not in unlocked:
+            await query.edit_message_text("❌ Not unlocked yet!")
+            return
+        
+        users[uid]['selected_achievement_2'] = ach_name
+        await safe_save_json("users.json", users)
+        
+        await select_achievements_menu(update, context)
+        
+    except Exception as e:
+        logger.error(f"Select achievement 2 error: {e}")
+
+async def save_achievements_callback(update, context):
     try:
         query = update.callback_query
         await query.answer()
@@ -3743,11 +3860,12 @@ async def save_selected_achievement_callback(update, context):
             await query.edit_message_text("❌ Please /start first!")
             return
         
-        selected = users[uid].get('selected_achievement', None)
+        selected_1 = users[uid].get('selected_achievement_1', None)
+        selected_2 = users[uid].get('selected_achievement_2', None)
         
-        if not selected:
+        if not selected_1 or not selected_2:
             await query.edit_message_text(
-                "❌ *NO ACHIEVEMENT SELECTED!*\n━━━━━━━━━━━━━━━━━━━━━━\n\nPlease select an achievement first, then click DONE.",
+                "❌ *Please select BOTH achievements!*\n━━━━━━━━━━━━━━━━━━━━━━\n\nClick 1️⃣ and 2️⃣ to select.",
                 parse_mode='Markdown'
             )
             return
@@ -3755,174 +3873,36 @@ async def save_selected_achievement_callback(update, context):
         users[uid]['selected_achievement_saved'] = True
         await safe_save_json("users.json", users)
         
-        rarity = ACHIEVEMENTS.get(selected, {}).get('rarity', 'common')
-        emoji = get_rarity_emoji(rarity)
-        
         await query.edit_message_text(
             f"""
-✅ *ACHIEVEMENT SAVED SUCCESSFULLY!*
+✅ *ACHIEVEMENTS SAVED!*
 ━━━━━━━━━━━━━━━━━━━━━━
 
-🏅 {selected} {emoji}
+🏅 Achievement 1: {selected_1}
+🏅 Achievement 2: {selected_2}
 
-📌 This achievement is now SAVED to your profile!
-📌 It will show on your PROFILE and LEADERBOARD!
-
+📌 These will show on your LEADERBOARD profile!
 ━━━━━━━━━━━━━━━━━━━━━━
-[⬅ BACK TO ACHIEVEMENTS]
 """,
             parse_mode='Markdown',
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("⬅ BACK TO ACHIEVEMENTS", callback_data="view_achievements")]
+                [InlineKeyboardButton("⬅ BACK TO PROFILE", callback_data="back_profile")]
             ])
         )
         
     except Exception as e:
-        logger.error(f"Save selected achievement callback error: {e}")
-        await query.edit_message_text("❌ Error saving achievement!", reply_markup=main_menu)
-
-async def back_to_profile_callback(update, context):
-    try:
-        query = update.callback_query
-        await query.answer()
-        
-        uid = str(query.from_user.id)
-        users = safe_load_json("users.json")
-        vip = safe_load_json("vip.json")
-        
-        is_vip = False
-        is_verified = context.user_data.get('verified', False)
-        exp_text = "No Membership"
-        key_text = "N/A"
-        remaining = "N/A"
-        joined_date = users.get(uid, {}).get('joined', datetime.now().strftime('%Y-%m-%d %H:%M'))
-        
-        if uid in vip:
-            exp = datetime.fromisoformat(vip[uid]['expiry'])
-            if exp > datetime.now():
-                is_vip = True
-                exp_text = exp.strftime('%Y-%m-%d %H:%M')
-                key_text = vip[uid]['key']
-                remaining_seconds = (exp - datetime.now()).total_seconds()
-                if remaining_seconds > 3600:
-                    remaining = f"{int(remaining_seconds // 3600)}h {int((remaining_seconds % 3600) // 60)}m"
-                else:
-                    remaining = f"{int(remaining_seconds // 60)}m"
-        
-        user = users.get(uid, {})
-        win = user.get('win_count', 0)
-        loss = user.get('loss_count', 0)
-        level = user.get('level', 1)
-        total_plays = win + loss
-        rank_data = get_aura_rank(total_plays)
-        progress = get_rank_progress(total_plays)
-        
-        username = query.from_user.username or "Unknown"
-        first_name = query.from_user.first_name or "User"
-        
-        streak = STREAK_TRACKER.get(uid, {}).get('streak', 0)
-        max_streak = STREAK_TRACKER.get(uid, {}).get('max_streak', 0)
-        
-        ach_stats = get_achievement_stats(uid)
-        title = get_achievement_title(ach_stats['percent'])
-        
-        selected_ach = None
-        if users.get(uid, {}).get('selected_achievement_saved', False):
-            selected_ach = users.get(uid, {}).get('selected_achievement', None)
-        
-        selected_display = f"🏅 {selected_ach}" if selected_ach else "None"
-        
-        ach_display = ""
-        if ach_stats['unlocked'] > 0:
-            unlocked_list = ach_stats['unlocked_list']
-            recent = unlocked_list[-4:] if len(unlocked_list) > 4 else unlocked_list
-            
-            ach_display = f"\n🏆 *ACHIEVEMENTS* ({ach_stats['unlocked']}/{ach_stats['total']})\n━━━━━━━━━━━━━━━━━━━━━━\n"
-            ach_display += f"📜 *Title:* {title}\n"
-            ach_display += f"🏅 *Selected:* {selected_display}\n"
-            ach_display += "⭐ *Recent Unlocked:*\n"
-            for ach in recent:
-                rarity = ACHIEVEMENTS.get(ach, {}).get('rarity', 'common')
-                emoji = get_rarity_emoji(rarity)
-                ach_display += f"├─ {ach} {emoji}\n"
-            ach_display += f"\n📊 *Progress:* {ach_stats['unlocked']}/{ach_stats['total']} ({ach_stats['percent']}%)\n"
-            ach_display += "\n[👉 SELECT ACHIEVEMENT] - Click below\n"
-            
-            if ach_stats['percent'] >= 100:
-                ach_display += "\n🎊🎊🎊 *COMPLETED!* 🎊🎊🎊\n👑 YOU ARE THE ULTIMATE LEGEND!\n"
-        else:
-            ach_display = "\n🏅 No achievements yet. Start playing!\n💪 Play your first game to unlock!\n"
-        
-        banner = f"""
-𝟬𝟭 — 𝗛𝗢𝗠𝗘 / 𝗪𝗘𝗟𝗖𝗢𝗠𝗘
-┌─[ 🌌 𝗖/𝗧 𝗪𝗜𝗡 𝗛𝗔𝗖𝗞 ]
-│
-├─┬─[ 𝗦𝗬𝗦𝗧𝗘𝗠 𝗜𝗡𝗙𝗢 ]
-│ ├─ 𝗨𝗦𝗘𝗥    :: @{username}
-│ ├─ 𝗔𝗖𝗖𝗘𝗦𝗦  :: {'★ VIP' if is_vip else 'FREE'}
-│ └─ 𝗦𝗘𝗖𝗨𝗥𝗜𝗧𝗬 :: {'🔐 VERIFIED' if is_verified else '🔓 UNVERIFIED'}
-│
-└─[ 🔐 𝗖/𝗧://𝗦𝗘𝗖𝗨𝗥𝗘_𝗖𝗢𝗡𝗡𝗘𝗖𝗧𝗜𝗢𝗡 ]
-
-┌─[ 📊 𝗣𝗥𝗢𝗙𝗜𝗟𝗘 ]
-│
-├─ 𝗨𝗦𝗘𝗥 𝗣𝗥𝗢𝗙𝗜𝗟𝗘
-│ ├─ 👤 𝗡𝗔𝗠𝗘     :: {first_name}
-│ ├─ 🆔 𝗜𝗗       :: {uid}
-│ ├─ 💎 𝗩𝗜𝗣      :: {'✅ ACTIVE' if is_vip else '❌ INACTIVE'}
-│ └─ ✅ 𝗩𝗘𝗥𝗜𝗙𝗜𝗘𝗗 :: {'✅ YES' if is_verified else '❌ NO'}
-│
-├─ 𝗠𝗘𝗠𝗕𝗘𝗥𝗦𝗛𝗜𝗣
-│ ├─ 𝗦𝗧𝗔𝗧𝗨𝗦     :: {'🟢 VIP' if is_vip else '🔴 FREE'}
-│ ├─ 𝗝𝗢𝗜𝗡𝗘𝗗     :: {joined_date}
-│ ├─ 𝗘𝗫𝗣𝗜𝗥𝗬     :: {exp_text}
-│ └─ ⏰ 𝗥𝗘𝗠𝗔𝗜𝗡𝗜𝗡𝗚 :: {remaining}
-│
-├─ 𝗥𝗔𝗡𝗞
-│ └─ {rank_data['emoji']} {rank_data['rank']} - {rank_data['tagline']}
-│
-├─ 𝗣𝗥𝗢𝗚𝗥𝗘𝗦𝗦
-│ ├─ Next: {progress['next']['rank'] if progress['next'] else '🏆 MAX'}
-│ ├─ {progress['done']} / {progress['required']} plays
-│ └─ {format_progress_bar(progress['percent'])}
-│
-├─ 𝗦𝗧𝗔𝗧𝗦
-│ ├─ 🏆 𝗪𝗜𝗡   :: {win}
-│ ├─ ❌ 𝗟𝗢𝗦𝗦  :: {loss}
-│ ├─ 📈 𝗟𝗘𝗩𝗘𝗟 :: {level}
-│ ├─ 📊 𝗧𝗢𝗧𝗔𝗟 :: {total_plays}
-│ ├─ 🔥 𝗦𝗧𝗥𝗘𝗔𝗞 :: {streak}
-│ └─ 👑 𝗠𝗔𝗫 𝗦𝗧𝗥𝗘𝗔𝗞 :: {max_streak}
-│
-{ach_display}
-├─ 𝗦𝗘𝗖𝗨𝗥𝗜𝗧𝗬
-│ └─ 🔑 𝗣𝗔𝗦𝗦𝗞𝗘𝗬 :: {key_text}
-│
-└─[ 𝗖/𝗧://𝗣𝗥𝗢𝗙𝗜𝗟𝗘 ]
-
-💡 Click 🏆 YOUR ACHIEVEMENTS to select which one shows on your profile!
-💡 Click 📜 COMPLETE HISTORY for full stats!
-"""
-        
-        keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🏆 YOUR ACHIEVEMENTS", callback_data="view_achievements")],
-            [InlineKeyboardButton("📜 COMPLETE HISTORY", callback_data="profile_history")],
-            [InlineKeyboardButton("⬅ BACK TO HOME", callback_data="back_home")]
-        ])
-        
-        await query.edit_message_text(banner, parse_mode='Markdown', reply_markup=keyboard)
-        
-    except Exception as e:
-        logger.error(f"Back to profile callback error: {e}")
-        await query.edit_message_text("❌ Error loading profile!", reply_markup=main_menu)
+        logger.error(f"Save achievements error: {e}")
 
 # ==========================================
-# ⭐ LEADERBOARD - 2 ACHIEVEMENTS PER PLAYER
+# ⭐ LEADERBOARD (UPDATED WITH VIEW PROFILE)
 # ==========================================
 async def leaderboard(update, context):
     try:
         uid = str(update.effective_user.id)
         users = safe_load_json("users.json")
+        
+        if uid in users:
+            users[uid]['last_active'] = datetime.now().isoformat()
         
         all_users = get_leaderboard_users()
         
@@ -3940,11 +3920,15 @@ async def leaderboard(update, context):
         top_10 = all_users[:10]
         medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
         
+        keyboard = []
+        
         for i, user in enumerate(top_10):
             medal = medals[i] if i < len(medals) else f"{i+1}."
             name = user["username"] if user["username"] != "Unknown" else user["name"]
             level = user.get('level', 1)
             total = user.get('total', 0)
+            rank_emoji = user.get('rank_emoji', '')
+            rank_name = user.get('rank_name', '')
             
             user_id = user["id"]
             previous_rank = users.get(user_id, {}).get('previous_rank', None)
@@ -3954,51 +3938,59 @@ async def leaderboard(update, context):
                 users[user_id]['previous_rank'] = i + 1
             
             unlocked = users.get(user_id, {}).get('achievements', {}).get('unlocked', [])
-            has_saved_selection = users.get(user_id, {}).get('selected_achievement_saved', False)
-            selected = users.get(user_id, {}).get('selected_achievement', None)
+            selected_1 = users.get(user_id, {}).get('selected_achievement_1', None)
+            selected_2 = users.get(user_id, {}).get('selected_achievement_2', None)
+            has_saved = users.get(user_id, {}).get('selected_achievement_saved', False)
             
             msg += f"""
 {medal} *{name}*
    📊 {total} Plays • Level {level} {arrow}
+   🎖️ {rank_emoji} {rank_name}
 """
             
-            achievements_to_show = []
-            
-            if has_saved_selection and selected and selected in unlocked:
-                achievements_to_show.append((selected, ACHIEVEMENTS.get(selected, {}).get('rarity', 'common')))
-                remaining = [a for a in unlocked if a != selected]
-                rare_remaining = get_rare_achievements(remaining)
-                if rare_remaining:
-                    random_rare = random.choice(rare_remaining)
-                    achievements_to_show.append(random_rare)
-                elif remaining:
-                    random_ach = random.choice(remaining)
-                    achievements_to_show.append((random_ach, ACHIEVEMENTS.get(random_ach, {}).get('rarity', 'common')))
+            if has_saved and selected_1 and selected_2 and selected_1 in unlocked and selected_2 in unlocked:
+                r1 = ACHIEVEMENTS.get(selected_1, {}).get('rarity', 'common')
+                r2 = ACHIEVEMENTS.get(selected_2, {}).get('rarity', 'common')
+                msg += f"""
+   ═══ ACHIEVEMENTS ═══
+   🏅 {selected_1} {get_rarity_emoji(r1)}
+   🏅 {selected_2} {get_rarity_emoji(r2)}
+"""
             else:
                 rare = get_rare_achievements(unlocked)
                 if len(rare) >= 2:
-                    selected_rare = random.sample(rare, 2)
-                    achievements_to_show = selected_rare
-                elif len(rare) == 1:
-                    achievements_to_show.append(rare[0])
-                    remaining = [a for a in unlocked if a != rare[0][0]]
-                    if remaining:
-                        random_ach = random.choice(remaining)
-                        achievements_to_show.append((random_ach, ACHIEVEMENTS.get(random_ach, {}).get('rarity', 'common')))
-                elif len(unlocked) >= 2:
-                    selected_random = random.sample(unlocked, 2)
-                    for ach in selected_random:
-                        achievements_to_show.append((ach, ACHIEVEMENTS.get(ach, {}).get('rarity', 'common')))
-                elif len(unlocked) == 1:
-                    achievements_to_show.append((unlocked[0], ACHIEVEMENTS.get(unlocked[0], {}).get('rarity', 'common')))
-            
-            if achievements_to_show:
-                msg += f"""
+                    sel = random.sample(rare, 2)
+                    msg += f"""
    ═══ ACHIEVEMENTS ═══
 """
-                for ach_name, rarity in achievements_to_show[:2]:
-                    emoji = get_rarity_emoji(rarity)
-                    msg += f"   🏅 {ach_name} {emoji}\n"
+                    for a, r in sel:
+                        msg += f"   🏅 {a} {get_rarity_emoji(r)}\n"
+                elif len(rare) == 1:
+                    msg += f"""
+   ═══ ACHIEVEMENTS ═══
+   🏅 {rare[0][0]} {get_rarity_emoji(rare[0][1])}
+"""
+                    remaining = [a for a in unlocked if a != rare[0][0]]
+                    if remaining:
+                        ra = random.choice(remaining)
+                        rr = ACHIEVEMENTS.get(ra, {}).get('rarity', 'common')
+                        msg += f"   🏅 {ra} {get_rarity_emoji(rr)}\n"
+                elif len(unlocked) >= 2:
+                    sel = random.sample(unlocked, 2)
+                    msg += f"""
+   ═══ ACHIEVEMENTS ═══
+"""
+                    for a in sel:
+                        r = ACHIEVEMENTS.get(a, {}).get('rarity', 'common')
+                        msg += f"   🏅 {a} {get_rarity_emoji(r)}\n"
+                elif len(unlocked) == 1:
+                    r = ACHIEVEMENTS.get(unlocked[0], {}).get('rarity', 'common')
+                    msg += f"""
+   ═══ ACHIEVEMENTS ═══
+   🏅 {unlocked[0]} {get_rarity_emoji(r)}
+"""
+            
+            keyboard.append([InlineKeyboardButton(f"👤 VIEW PROFILE - {name}", callback_data=f"view_profile_{user_id}")])
         
         await safe_save_json("users.json", users)
         
@@ -4018,66 +4010,22 @@ async def leaderboard(update, context):
                     pos = i
                     break
             
-            previous_rank = user_data.get('previous_rank', None)
-            arrow = get_rank_arrow(pos, previous_rank)
-            users[uid]['previous_rank'] = pos
-            await safe_save_json("users.json", users)
-            
             msg += f"""
 👤 *YOUR RANK*
 
 #{pos}  {rank_data['emoji']} *{rank_data['rank']}*
-📊 {total_plays} Plays • Level {level} {arrow}
+📊 {total_plays} Plays • Level {level}
 """
-            
-            unlocked = user_data.get('achievements', {}).get('unlocked', [])
-            selected_ach = user_data.get('selected_achievement', None)
-            has_saved = user_data.get('selected_achievement_saved', False)
-            
-            my_achievements = []
-            if has_saved and selected_ach and selected_ach in unlocked:
-                my_achievements.append((selected_ach, ACHIEVEMENTS.get(selected_ach, {}).get('rarity', 'common')))
-                remaining = [a for a in unlocked if a != selected_ach]
-                rare_remaining = get_rare_achievements(remaining)
-                if rare_remaining:
-                    my_achievements.append(random.choice(rare_remaining))
-                elif remaining:
-                    random_ach = random.choice(remaining)
-                    my_achievements.append((random_ach, ACHIEVEMENTS.get(random_ach, {}).get('rarity', 'common')))
-            else:
-                rare = get_rare_achievements(unlocked)
-                if len(rare) >= 2:
-                    my_achievements = random.sample(rare, 2)
-                elif len(rare) == 1:
-                    my_achievements.append(rare[0])
-                    remaining = [a for a in unlocked if a != rare[0][0]]
-                    if remaining:
-                        random_ach = random.choice(remaining)
-                        my_achievements.append((random_ach, ACHIEVEMENTS.get(random_ach, {}).get('rarity', 'common')))
-                elif len(unlocked) >= 2:
-                    selected_random = random.sample(unlocked, 2)
-                    for ach in selected_random:
-                        my_achievements.append((ach, ACHIEVEMENTS.get(ach, {}).get('rarity', 'common')))
-                elif len(unlocked) == 1:
-                    my_achievements.append((unlocked[0], ACHIEVEMENTS.get(unlocked[0], {}).get('rarity', 'common')))
-            
-            if my_achievements:
-                msg += f"""
-   ═══ YOUR ACHIEVEMENTS ═══
-"""
-                for ach_name, rarity in my_achievements[:2]:
-                    emoji = get_rarity_emoji(rarity)
-                    msg += f"   🏅 {ach_name} {emoji}\n"
         
         msg += f"""
 ━━━━━━━━━━━━━━━━━━━━━━
 👥 *Total Players:* {len(all_users)}
-💡 *Rank changes every hour!* ⏰
+💡 *Click VIEW PROFILE to see player details!*
 """
         
-        leaderboard_menu = ReplyKeyboardMarkup([
-            ["🏠 HOME"]
-        ], resize_keyboard=True)
+        keyboard.append([InlineKeyboardButton("🏠 HOME", callback_data="back_home")])
+        
+        leaderboard_menu = InlineKeyboardMarkup(keyboard)
         
         await update.message.reply_text(msg, parse_mode='Markdown', reply_markup=leaderboard_menu)
         
@@ -4085,6 +4033,9 @@ async def leaderboard(update, context):
         logger.error(f"Leaderboard error: {e}")
         await update.message.reply_text("❌ Error loading leaderboard!", reply_markup=main_menu)
 
+# ==========================================
+# ⭐ PROFILE HISTORY
+# ==========================================
 async def profile_history_callback(update, context):
     try:
         query = update.callback_query
@@ -4112,23 +4063,7 @@ async def profile_history_callback(update, context):
         win_rate = (win / total_plays * 100) if total_plays > 0 else 0
         win_rate_display = f"{win_rate:.1f}%"
         
-        today = datetime.now().date().isoformat()
-        daily_plays = 0
-        daily_wins = 0
-        daily_losses = 0
-        
-        if uid in HISTORY_TRACKER:
-            for entry in HISTORY_TRACKER[uid]:
-                entry_date = entry.get('time', '')[:10]
-                if entry_date == today:
-                    daily_plays += 1
-                    if entry.get('result') == 'WIN':
-                        daily_wins += 1
-                    else:
-                        daily_losses += 1
-        
-        daily_win_rate = (daily_wins / daily_plays * 100) if daily_plays > 0 else 0
-        daily_win_rate_display = f"{daily_win_rate:.1f}%"
+        today_activity = get_today_activity(uid)
         
         all_users = get_leaderboard_users()
         total_players = len(all_users)
@@ -4138,19 +4073,6 @@ async def profile_history_callback(update, context):
             if u['id'] == uid:
                 player_rank = i
                 break
-        
-        top_10 = all_users[:10]
-        avg_top10_plays = 0
-        avg_top10_wins = 0
-        avg_top10_winrate = 0
-        
-        if top_10:
-            for u in top_10:
-                avg_top10_plays += u.get('total', 0)
-                avg_top10_wins += u.get('win', 0)
-            avg_top10_plays = avg_top10_plays // len(top_10)
-            avg_top10_wins = avg_top10_wins // len(top_10)
-            avg_top10_winrate = (avg_top10_wins / avg_top10_plays * 100) if avg_top10_plays > 0 else 0
         
         rank_data = get_aura_rank(total_plays)
         progress = get_rank_progress(total_plays)
@@ -4187,11 +4109,11 @@ async def profile_history_callback(update, context):
 └─ 👑 *Best Streak* :: {max_streak} wins 🏆
 
 ━━━━━━━━━━━━━━━━━━━━━━
-📅 *TODAY'S STATS*
-├─ 🏆 *Today Wins* :: {daily_wins}
-├─ ❌ *Today Losses* :: {daily_losses}
-├─ 📊 *Today Plays* :: {daily_plays}
-└─ 📈 *Today Win Rate* :: {daily_win_rate_display}
+📅 *TODAY'S ACTIVITY*
+├─ 🏆 *Today Wins* :: {today_activity['wins']}
+├─ ❌ *Today Losses* :: {today_activity['losses']}
+├─ 📊 *Today Plays* :: {today_activity['plays']}
+└─ 📈 *Today Win Rate* :: {today_activity['win_rate']:.1f}%
 
 ━━━━━━━━━━━━━━━━━━━━━━
 🏅 *ACHIEVEMENTS*
@@ -4200,15 +4122,12 @@ async def profile_history_callback(update, context):
 └─ 👑 *Title* :: {title}
 
 ━━━━━━━━━━━━━━━━━━━━━━
-👥 *PLAYER RATING (vs Others)*
+👥 *PLAYER RATING*
 ├─ 📊 *Your Rank* :: #{player_rank} / {total_players}
-├─ 📈 *Your Plays* :: {total_plays}
-├─ 📊 *Top 10 Avg Plays* :: {avg_top10_plays}
-├─ 📈 *Top 10 Avg Win Rate* :: {avg_top10_winrate:.1f}%
-└─ 💡 *You are {'ABOVE' if total_plays > avg_top10_plays else 'BELOW'} average!*
+└─ 📈 *Total Plays* :: {total_plays}
 
 ━━━━━━━━━━━━━━━━━━━━━━
-💪 *KEEP PLAYING TO BEAT THE TOP 10!* 🚀
+💪 *KEEP PLAYING!* 🚀
 """
         
         keyboard = InlineKeyboardMarkup([
@@ -4288,11 +4207,16 @@ async def profile(update, context):
         ach_stats = get_achievement_stats(uid)
         title = get_achievement_title(ach_stats['percent'])
         
-        selected_ach = None
-        if users.get(uid, {}).get('selected_achievement_saved', False):
-            selected_ach = users.get(uid, {}).get('selected_achievement', None)
+        selected_1 = users.get(uid, {}).get('selected_achievement_1', None)
+        selected_2 = users.get(uid, {}).get('selected_achievement_2', None)
         
-        selected_display = f"🏅 {selected_ach}" if selected_ach else "None"
+        selected_display = ""
+        if selected_1:
+            selected_display += f"🏅 1: {selected_1}\n"
+        if selected_2:
+            selected_display += f"🏅 2: {selected_2}\n"
+        if not selected_display:
+            selected_display = "None"
         
         ach_display = ""
         if ach_stats['unlocked'] > 0:
@@ -4301,14 +4225,13 @@ async def profile(update, context):
             
             ach_display = f"\n🏆 *ACHIEVEMENTS* ({ach_stats['unlocked']}/{ach_stats['total']})\n━━━━━━━━━━━━━━━━━━━━━━\n"
             ach_display += f"📜 *Title:* {title}\n"
-            ach_display += f"🏅 *Selected:* {selected_display}\n"
+            ach_display += f"🏅 *Selected:*\n{selected_display}"
             ach_display += "⭐ *Recent Unlocked:*\n"
             for ach in recent:
                 rarity = ACHIEVEMENTS.get(ach, {}).get('rarity', 'common')
                 emoji = get_rarity_emoji(rarity)
                 ach_display += f"├─ {ach} {emoji}\n"
             ach_display += f"\n📊 *Progress:* {ach_stats['unlocked']}/{ach_stats['total']} ({ach_stats['percent']}%)\n"
-            ach_display += "\n[👉 SELECT ACHIEVEMENT] - Click below\n"
             
             if ach_stats['percent'] >= 100:
                 ach_display += "\n🎊🎊🎊 *COMPLETED!* 🎊🎊🎊\n👑 YOU ARE THE ULTIMATE LEGEND!\n"
@@ -4361,12 +4284,10 @@ async def profile(update, context):
 │ └─ 🔑 𝗣𝗔𝗦𝗦𝗞𝗘𝗬 :: {key_text}
 │
 └─[ 𝗖/𝗧://𝗣𝗥𝗢𝗙𝗜𝗟𝗘 ]
-
-💡 Click 🏆 YOUR ACHIEVEMENTS to select which one shows on your profile!
-💡 Click 📜 COMPLETE HISTORY for full stats!
 """
         
         keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🏅 SELECT 2 ACHIEVEMENTS", callback_data="select_achievements")],
             [InlineKeyboardButton("🏆 YOUR ACHIEVEMENTS", callback_data="view_achievements")],
             [InlineKeyboardButton("📜 COMPLETE HISTORY", callback_data="profile_history")],
             [InlineKeyboardButton("⬅ BACK TO HOME", callback_data="back_home")]
@@ -4379,9 +4300,8 @@ async def profile(update, context):
         await update.message.reply_text("❌ Error loading profile!", reply_markup=main_menu)
 
 # ==========================================
-# ⭐ PAYMENT FUNCTIONS
+# ⭐ REMAINING FUNCTIONS (AUTO-APPROVAL ETC)
 # ==========================================
-
 async def approve_payment(query, context, req_id):
     try:
         pay = safe_load_json("pay.json")
@@ -4693,10 +4613,6 @@ async def broadcast(update, context):
         context.user_data['broadcast_mode'] = False
         await update.message.reply_text("❌ Error! Please try again.", reply_markup=admin_menu)
 
-# ==========================================
-# ⭐ APPROVAL LOG
-# ==========================================
-
 async def approval_log(update, context):
     try:
         uid = int(update.effective_user.id)
@@ -4801,10 +4717,6 @@ async def admin_activity(update, context):
         logger.error(f"Admin activity error: {e}")
         await update.message.reply_text("❌ Error loading admin activity!", reply_markup=super_admin_menu)
 
-# ==========================================
-# ⭐ ACHIEVEMENTS COMMAND
-# ==========================================
-
 async def achievements(update, context):
     try:
         uid = str(update.effective_user.id)
@@ -4895,10 +4807,6 @@ async def achievements(update, context):
     except Exception as e:
         logger.error(f"Achievements error: {e}")
         await update.message.reply_text("❌ Error loading achievements!", reply_markup=profile_menu)
-
-# ==========================================
-# ⭐ RANK COMMAND
-# ==========================================
 
 async def rank_command(update, context):
     try:
@@ -5092,10 +5000,6 @@ async def rank_command(update, context):
         logger.error(f"Rank command error: {e}")
         await update.message.reply_text("❌ Error loading rank!", reply_markup=main_menu)
 
-# ==========================================
-# ⭐ TRACK USER
-# ==========================================
-
 async def track_user(update, context):
     try:
         uid = int(update.effective_user.id)
@@ -5149,51 +5053,6 @@ Example:
     except Exception as e:
         logger.error(f"Track user error: {e}")
         await update.message.reply_text("❌ Error tracking user!", reply_markup=admin_menu)
-
-async def show_devices(update, context):
-    try:
-        uid = int(update.effective_user.id)
-        
-        if uid not in ADMIN_IDS and uid not in SUPER_ADMIN_IDS:
-            await update.message.reply_text("❌ Access Denied! Admin only.")
-            return
-        
-        users = safe_load_json("users.json")
-        
-        devices = {}
-        for user_id, user_data in users.items():
-            device_id = user_data.get('device_id', '')
-            if device_id:
-                if device_id not in devices:
-                    devices[device_id] = []
-                devices[device_id].append({
-                    'username': user_data.get('username', 'Unknown'),
-                    'user_id': user_id,
-                    'is_fake': user_data.get('is_fake', False)
-                })
-        
-        if not devices:
-            await update.message.reply_text("📭 No devices found!")
-            return
-        
-        msg = f"""
-📱 *UNIQUE DEVICES ({len(devices)})*
-━━━━━━━━━━━━━━━━━━━━━━
-"""
-        for device_id, users_list in list(devices.items())[:30]:
-            msg += f"📱 `{device_id[:12]}...` -> {len(users_list)} users\n"
-            for u in users_list[:3]:
-                fake_tag = " (FAKE)" if u['is_fake'] else ""
-                msg += f"   👤 @{u['username']} (ID: {u['user_id']}){fake_tag}\n"
-            if len(users_list) > 3:
-                msg += f"   ... and {len(users_list)-3} more\n"
-            msg += "━━━━━━━━━━━━━━━━━━━━━━\n"
-        
-        await update.message.reply_text(msg, parse_mode='Markdown')
-        
-    except Exception as e:
-        logger.error(f"Show devices error: {e}")
-        await update.message.reply_text("❌ Error loading devices!", reply_markup=admin_menu)
 
 async def feedback(update, context):
     try:
@@ -5311,7 +5170,6 @@ async def feedback_log(update, context):
 # ==========================================
 # ⭐ PLAY AND GAME FUNCTIONS
 # ==========================================
-
 async def play(update, context):
     try:
         uid = str(update.effective_user.id)
@@ -5361,9 +5219,7 @@ async def play(update, context):
         logger.error(f"Play error: {e}")
         await update.message.reply_text("❌ Error! Please try again.", reply_markup=main_menu)
 
-# ✅ SUPER ADMIN PLAY FUNCTION
 async def super_admin_play(update, context):
-    """Super Admin Play - Number instantly added to algorithm"""
     try:
         uid = str(update.effective_user.id)
         
@@ -5461,7 +5317,7 @@ async def timer_select(update, context):
         
         if uid not in users:
             device_info = get_user_details(update)
-            users[uid] = {"id": uid, "name": update.effective_user.username or "Unknown", "joined": str(datetime.now()), "win_count": 0, "loss_count": 0, "level": 1, "rank_level": 0, "previous_rank": None, "device_id": device_info["device_id"], "ip_address": device_info["ip_address"], "free_trial_used": False, "free_trial_expiry": None, "username": device_info["username"], "first_name": device_info["first_name"], "last_name": device_info["last_name"], "language_code": device_info["language_code"], "achievements": {"unlocked": []}}
+            users[uid] = {"id": uid, "name": update.effective_user.username or "Unknown", "joined": str(datetime.now()), "win_count": 0, "loss_count": 0, "level": 1, "rank_level": 0, "previous_rank": None, "device_id": device_info["device_id"], "ip_address": device_info["ip_address"], "free_trial_used": False, "free_trial_expiry": None, "username": device_info["username"], "first_name": device_info["first_name"], "last_name": device_info["last_name"], "language_code": device_info["language_code"], "achievements": {"unlocked": []}, "selected_achievement_1": None, "selected_achievement_2": None, "last_active": datetime.now().isoformat()}
             await safe_save_json("users.json", users)
             logger.info(f"✅ New user created in timer: {uid}")
         timer_map = {"⏱ 30s": "30", "⏱ 1m": "60", "⏱ 2m": "120", "⏱ 5m": "300"}
@@ -5647,9 +5503,8 @@ async def process_analysis(update, context, uid, periods=None, last_period=None)
         await update.message.reply_text("❌ Error! Please try again.", reply_markup=result_keyboard)
 
 # ==========================================
-# ⭐ HANDLE RESULT - SINGLE LEVEL SYSTEM
+# ⭐ HANDLE RESULT
 # ==========================================
-
 async def handle_result(update, context):
     try:
         uid = str(update.effective_user.id)
@@ -5720,6 +5575,7 @@ async def handle_result(update, context):
                 current_level = users[uid].get('level', 1)
                 new_level = calculate_level(current_level, win)
                 users[uid]['level'] = new_level
+                users[uid]['last_active'] = datetime.now().isoformat()
                 
                 old_total = users[uid]['win_count'] + users[uid]['loss_count']
                 old_rank = get_aura_rank(old_total)
@@ -6009,23 +5865,6 @@ async def stats(update, context):
     except Exception as e:
         logger.error(f"Stats error: {e}")
 
-async def payments_list(update, context):
-    try:
-        if int(update.effective_user.id) not in ADMIN_IDS:
-            await update.message.reply_text("❌ Admin only!")
-            return
-        pay = safe_load_json("pay.json")
-        pending = [p for p in pay.values() if p['status'] == 'pending']
-        if not pending:
-            await update.message.reply_text("📭 No pending payments")
-            return
-        msg = "📋 PENDING PAYMENTS:\n━━━━━━━━━━━━━━━━━━━━━━\n"
-        for i, p in enumerate(pending[:10], 1):
-            msg += f"{i}. {p['id']}\n   👤 @{p['name']}\n   🕐 {p['time'][:16]}\n\n"
-        await update.message.reply_text(msg)
-    except Exception as e:
-        logger.error(f"Payments list error: {e}")
-
 async def payment_history(update, context):
     try:
         if int(update.effective_user.id) not in ADMIN_IDS:
@@ -6102,7 +5941,6 @@ async def payment_status(update, context):
 # ==========================================
 # ⭐ HANDLE BUTTONS
 # ==========================================
-
 async def handle_buttons(update, context):
     try:
         text = update.message.text
@@ -6111,9 +5949,11 @@ async def handle_buttons(update, context):
         users = safe_load_json("users.json")
         if uid not in users:
             device_info = get_user_details(update)
-            users[uid] = {"id": uid, "name": update.effective_user.username or "Unknown", "joined": str(datetime.now()), "win_count": 0, "loss_count": 0, "level": 1, "rank_level": 0, "previous_rank": None, "device_id": device_info["device_id"], "ip_address": device_info["ip_address"], "free_trial_used": False, "free_trial_expiry": None, "username": device_info["username"], "first_name": device_info["first_name"], "last_name": device_info["last_name"], "language_code": device_info["language_code"], "achievements": {"unlocked": []}}
+            users[uid] = {"id": uid, "name": update.effective_user.username or "Unknown", "joined": str(datetime.now()), "win_count": 0, "loss_count": 0, "level": 1, "rank_level": 0, "previous_rank": None, "device_id": device_info["device_id"], "ip_address": device_info["ip_address"], "free_trial_used": False, "free_trial_expiry": None, "username": device_info["username"], "first_name": device_info["first_name"], "last_name": device_info["last_name"], "language_code": device_info["language_code"], "achievements": {"unlocked": []}, "selected_achievement_1": None, "selected_achievement_2": None, "last_active": datetime.now().isoformat()}
             await safe_save_json("users.json", users)
             logger.info(f"✅ New user created: {uid}")
+        
+        users[uid]['last_active'] = datetime.now().isoformat()
         
         if text == "▶️ SUPER ADMIN PLAY":
             user_id_int = int(uid)
@@ -6425,7 +6265,6 @@ async def error_handler(update, context):
 # ==========================================
 # ⭐ MAIN FUNCTION
 # ==========================================
-
 def main():
     load_all_data()
     
@@ -6484,7 +6323,7 @@ def main():
     thread.start()
     print("✅ Health check server running on port 10000!")
     print("=" * 50)
-    print("🌟 AURA BOT v13.0 STARTED!")
+    print("🌟 AURA BOT v14.0 STARTED!")
     print("=" * 50)
     print("✅ Bot is running!")
     print(f"👑 Super Admin: {SUPER_ADMIN_IDS}")
@@ -6515,7 +6354,7 @@ def main():
     print("🔄 Dynamic Top 3: ENABLED (Every 2-4 hours)")
     print("🎮 PLAY Button: MOVED TO BOTTOM (BIGGER)")
     print("📋 FULL RANK CHART: ENABLED (BEGINNER to GOD TIER)")
-    print("🔒 CONCURRENT PLAYERS: ENABLED (100+ players simultaneously)")
+    print("🔒 CONCURRENT PLAYERS: ENABLED (200+ players simultaneously)")
     print("🔐 THREAD SAFE: ENABLED (No data corruption)")
     print("⌨️ KEYBOARD HIDE: ENABLED (During PLAY)")
     print("📋 APPROVAL LOG: FIXED")
@@ -6527,13 +6366,13 @@ def main():
     print("✅ DOPAMINE HIT EMOJIS: 5 WIN + 5 LOSS Variations (3s Auto-Delete)")
     print("✅ VIP EXPIRE PAR DATA DELETE NAHI HOTA")
     print("✅ BOT RESTART PAR DATA SAFE RAHEGA")
-    print("✅ 100+ PLAYERS EK SAATH FAST")
+    print("✅ 200+ PLAYERS EK SAATH FAST")
     print("✅ DEVICE TRACKING FIXED")
     print("✅ NEW PLAYERS STATS FIXED")
     print("✅ LEADERBOARD FIXED")
     print("✅ STUDY PANEL: ENABLED (Super Admin Only)")
     print("✅ BIG/SMALL BUTTONS: REMOVED (Only Numbers)")
-    print("✅ 100+ CONCURRENT PLAYERS: ENABLED")
+    print("✅ 200+ CONCURRENT PLAYERS: ENABLED")
     print("✅ GAME LEVEL: REMOVED (Single Level System)")
     print("👑 SUPER ADMIN PLAY: ENABLED (Sirf SA ka number add hoga)")
     print("📚 TEACH PANEL: ENABLED (Graph + Numbers List + Tracking)")
@@ -6541,6 +6380,10 @@ def main():
     print("🎯 752 NUMBERS: ENABLED (Initial Dataset)")
     print("🎯 4-LEVEL DETECTION: ENABLED (Auto Detect + Change)")
     print("🔄 AUTO CHANGE: ENABLED (Bar bar aane wale numbers skip honge)")
+    print("👤 VIEW PROFILE: ENABLED (Click player to see profile)")
+    print("🏅 2 ACHIEVEMENT SELECTION: ENABLED")
+    print("📅 TODAY'S ACTIVITY: ENABLED")
+    print("🕐 LAST ACTIVE: ENABLED")
     print("✅ ALL ERRORS FIXED")
     print("=" * 50)
     app.run_polling()
