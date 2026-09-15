@@ -2310,46 +2310,68 @@ def build_bar_graph(data_dict, max_days=7):
     return graph
 
 # ==========================================
-# ⭐ ACCUSS VIP FUNCTION (FIXED - LINK FIRST, THEN VOICE)
+# ⭐ ACCUSS VIP FUNCTION (LINK + VOICE - FINAL FIX)
 # ==========================================
 async def accuss_vip(update, context):
     try:
         logger.info(f"🎮 ACCUSS VIP triggered by user {update.effective_user.id}")
         
         # ==========================================
-        # STEP 1: LINK BHEJO (Inline Buttons ke saath)
+        # STEP 1: VALID LINKS FILTER KARO
         # ==========================================
         keyboard = []
-        for link in GAMER_LINKS:
-            keyboard.append([InlineKeyboardButton(link["name"], url=link["url"])])
+        valid_links_count = 0
         
-        try:
+        for link in GAMER_LINKS:
+            url = link.get("url", "").strip()
+            
+            if url and url.startswith("http") and "YAHAN" not in url and "DAAL" not in url:
+                keyboard.append([InlineKeyboardButton(link["name"], url=url)])
+                valid_links_count += 1
+                logger.info(f"✅ Valid link added: {link['name']} → {url}")
+            else:
+                logger.warning(f"⚠️ Invalid/placeholder link skipped: {link['name']} → {url}")
+        
+        # ==========================================
+        # STEP 2: LINKS WALA MESSAGE BHEJO
+        # ==========================================
+        if valid_links_count > 0:
+            try:
+                await update.message.reply_text(
+                    "🎮 ACCUSS VIP\n"
+                    "━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    "👇 Niche diye gaye link se apna ID banao\n"
+                    "💰 ₹300 deposit karo\n"
+                    "📸 Screenshot bhejo\n"
+                    "✅ VIP activate ho jayega\n\n"
+                    "━━━━━━━━━━━━━━━━━━━━━━\n"
+                    "🎯 Select Your Game:",
+                    reply_markup=InlineKeyboardMarkup(keyboard)
+                )
+                logger.info(f"✅ ACCUSS VIP text sent with {valid_links_count} valid links")
+            except Exception as e:
+                logger.error(f"❌ Text send error: {e}")
+                try:
+                    await update.message.reply_text(
+                        f"🎮 ACCUSS VIP\n\n{valid_links_count} game links available below:",
+                        reply_markup=InlineKeyboardMarkup(keyboard)
+                    )
+                except Exception as e2:
+                    logger.error(f"❌ Even simple text failed: {e2}")
+        else:
+            logger.error("❌ NO VALID LINKS FOUND!")
             await update.message.reply_text(
                 "🎮 ACCUSS VIP\n"
                 "━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                "👇 Niche diye gaye link se apna ID banao\n"
-                "💰 ₹300 deposit karo\n"
-                "📸 Screenshot bhejo\n"
-                "✅ VIP activate ho jayega\n\n"
-                "━━━━━━━━━━━━━━━━━━━━━━\n"
-                "🎯 Select Your Game:",
-                reply_markup=InlineKeyboardMarkup(keyboard)
+                "⚠️ Links abhi available nahi hain.\n"
+                "Admin se contact karo: @BDGmin",
+                parse_mode='Markdown'
             )
-            logger.info("✅ ACCUSS VIP text + links sent")
-        except Exception as e:
-            logger.error(f"❌ Text send error: {e}")
-            try:
-                await update.message.reply_text(
-                    "🎮 ACCUSS VIP\n\nSelect your game below:",
-                    reply_markup=InlineKeyboardMarkup(keyboard)
-                )
-            except Exception as e2:
-                logger.error(f"❌ Even simple text failed: {e2}")
         
         # ==========================================
-        # STEP 2: THODA WAIT KARO, PHIR VOICE BHEJO
+        # STEP 3: 1 SECOND WAIT, PHIR VOICE BHEJO
         # ==========================================
-        await asyncio.sleep(1)  # 1 second wait
+        await asyncio.sleep(1)
         
         voice_sent = False
         try:
@@ -2364,12 +2386,6 @@ async def accuss_vip(update, context):
                 "voice.ogg",
                 "voice.mp3",
             ]
-            
-            logger.info(f"🔍 Searching for voice file in: {os.getcwd()}")
-            try:
-                logger.info(f"📁 Files available: {os.listdir()}")
-            except Exception as le:
-                logger.error(f"❌ Cannot list dir: {le}")
             
             voice_file_found = None
             for fname in possible_files:
@@ -2399,11 +2415,7 @@ async def accuss_vip(update, context):
                 except Exception as fe:
                     logger.error(f"❌ File read error: {fe}")
             else:
-                logger.error(f"❌ NO VOICE FILE FOUND. Looked for: {possible_files}")
-                try:
-                    logger.error(f"📁 Directory contents: {os.listdir()}")
-                except:
-                    pass
+                logger.error(f"❌ NO VOICE FILE FOUND")
         
         except Exception as e:
             logger.error(f"❌ Voice send outer error: {e}")
@@ -2411,7 +2423,7 @@ async def accuss_vip(update, context):
             logger.error(traceback.format_exc())
         
         context.user_data['waiting_payment'] = True
-        logger.info(f"✅ ACCUSS VIP done for user {update.effective_user.id}, voice_sent={voice_sent}")
+        logger.info(f"✅ ACCUSS VIP done for user {update.effective_user.id}, voice_sent={voice_sent}, valid_links={valid_links_count}")
         
     except Exception as e:
         logger.error(f"❌❌ ACCUSS VIP CRITICAL ERROR: {e}")
