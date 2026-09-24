@@ -213,6 +213,7 @@ ALGORITHM_STATS = {
     "initial_count": 0,
     "added_by_super_admin": 0,
     "skipped_by_players": 0,
+    "skipped_duplicate": 0,
     "daily_additions": {},
     "last_updated": datetime.now().isoformat(),
     "total_added_today": 0,
@@ -220,7 +221,6 @@ ALGORITHM_STATS = {
     "level4_detections": 0,
     "auto_changes": 0
 }
-
 # ==========================================
 # ⭐ CONCURRENT PLAYERS LOCK (OPTIMIZED FOR 200+)
 # ==========================================
@@ -343,7 +343,7 @@ def detect_level4_pattern(number):
     LEVEL4_TRACKER["last_number"] = current
     count = LEVEL4_TRACKER["consecutive_count"].get(current, 1)
     
-    if count >= 4:
+        if count >= 4:
         LEVEL4_TRACKER["total_detections"] += 1
         ALGORITHM_STATS["level4_detections"] += 1
         
@@ -357,8 +357,12 @@ def detect_level4_pattern(number):
         if len(LEVEL4_TRACKER["detection_log"]) > 50:
             LEVEL4_TRACKER["detection_log"].pop(0)
         
-        logger.info(f"⚠️ 4-LEVEL DETECTED! Number {current} aaya {count} baar lagatar.")
+        logger.info(f"⚠️ 4-LEVEL DETECTED! Number {current} aaya {count} baar lagatar. CHANGE KARO!")
         return True, True
+    
+    if count == 3:
+        logger.info(f"⚠️ 3-LEVEL DETECTED! Number {current} aaya 3 baar lagatar. NO CHANGE (Wait for 4th)")
+        return False, False
     
     return False, False
 
@@ -1478,6 +1482,14 @@ def add_result_to_history(number, is_super_admin=False):
         num = int(number)
         if 0 <= num <= 9:
             if is_super_admin:
+                recent_history = HISTORICAL_RESULTS[-50:] if len(HISTORICAL_RESULTS) > 50 else HISTORICAL_RESULTS
+                number_exists = num in recent_history
+                
+                if number_exists:
+                    logger.info(f"⚠️ Number {num} already algorithm mein hai. SKIP.")
+                    ALGORITHM_STATS["skipped_duplicate"] = ALGORITHM_STATS.get("skipped_duplicate", 0) + 1
+                    return False
+                
                 detected, should_skip = detect_level4_pattern(num)
                 
                 if detected:
