@@ -343,7 +343,7 @@ def detect_level4_pattern(number):
     LEVEL4_TRACKER["last_number"] = current
     count = LEVEL4_TRACKER["consecutive_count"].get(current, 1)
     
-        if count >= 4:
+    if count >= 4:
         LEVEL4_TRACKER["total_detections"] += 1
         ALGORITHM_STATS["level4_detections"] += 1
         
