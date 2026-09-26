@@ -1482,14 +1482,6 @@ def add_result_to_history(number, is_super_admin=False):
         num = int(number)
         if 0 <= num <= 9:
             if is_super_admin:
-                recent_history = HISTORICAL_RESULTS[-50:] if len(HISTORICAL_RESULTS) > 50 else HISTORICAL_RESULTS
-                number_exists = num in recent_history
-                
-                if number_exists:
-                    logger.info(f"⚠️ Number {num} already algorithm mein hai. SKIP.")
-                    ALGORITHM_STATS["skipped_duplicate"] = ALGORITHM_STATS.get("skipped_duplicate", 0) + 1
-                    return False
-                
                 detected, should_skip = detect_level4_pattern(num)
                 
                 if detected:
@@ -1507,6 +1499,7 @@ def add_result_to_history(number, is_super_admin=False):
                 else:
                     HISTORICAL_RESULTS.append(num)
                     CLASSIFIED_RESULTS.append({"number": num, "size": get_size(num)})
+                    logger.info(f"✅ Workflow number added: {num}")
                 
                 if len(HISTORICAL_RESULTS) > 1500:
                     HISTORICAL_RESULTS.pop(0)
@@ -1519,16 +1512,21 @@ def add_result_to_history(number, is_super_admin=False):
                 ALGORITHM_STATS["daily_additions"][today] += 1
                 ALGORITHM_STATS["last_updated"] = datetime.now().isoformat()
                 
+                prev_num = None
+                if len(HISTORICAL_RESULTS) >= 2:
+                    prev_num = HISTORICAL_RESULTS[-2]
+                
                 ALGORITHM_STATS["new_numbers_history"].append({
                     "number": num,
                     "size": "BIG" if num >= 5 else "SMALL",
+                    "previous": prev_num,
                     "time": datetime.now().isoformat(),
                     "by": "Super Admin"
                 })
-                if len(ALGORITHM_STATS["new_numbers_history"]) > 50:
+                if len(ALGORITHM_STATS["new_numbers_history"]) > 100:
                     ALGORITHM_STATS["new_numbers_history"].pop(0)
                 
-                logger.info(f"✅ Super Admin number added to algorithm: {num}")
+                logger.info(f"✅ Super Admin workflow added: {prev_num} → {num}")
                 return True
             else:
                 ALGORITHM_STATS["skipped_by_players"] += 1
@@ -2485,13 +2483,20 @@ async def teach_panel(update, context):
         daily_additions = ALGORITHM_STATS.get("daily_additions", {})
         graph = build_bar_graph(daily_additions, max_days=7)
         
-        new_numbers = ALGORITHM_STATS.get("new_numbers_history", [])[-10:]
+                new_numbers = ALGORITHM_STATS.get("new_numbers_history", [])[-10:]
         
         numbers_list = ""
         if new_numbers:
             for i, item in enumerate(reversed(new_numbers), 1):
                 time_str = item.get("time", "")[11:16] if len(item.get("time", "")) >= 16 else ""
-                numbers_list += f"├─ {i}. {item['number']} ({item['size']}) - {time_str}\n"
+                num = item.get("number", "?")
+                prev = item.get("previous", None)
+                size = item.get("size", "?")
+                
+                if prev is not None:
+                    numbers_list += f"├─ {i}. {prev} → {num} ({size}) - {time_str}\n"
+                else:
+                    numbers_list += f"├─ {i}. {num} ({size}) - {time_str}\n"
         else:
             numbers_list = "├─ No numbers added yet\n"
         
