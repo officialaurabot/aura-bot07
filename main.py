@@ -214,6 +214,8 @@ ALGORITHM_STATS = {
     "added_by_super_admin": 0,
     "skipped_by_players": 0,
     "skipped_duplicate": 0,
+    "skipped_pattern": 0,
+    "pattern_history": [],
     "daily_additions": {},
     "last_updated": datetime.now().isoformat(),
     "total_added_today": 0,
@@ -1477,6 +1479,50 @@ def get_prediction_with_analysis(current_number):
         'message': f"✅ Found {len(sorted_candidates)} unique numbers after {current}"
     }
 
+def add_pattern_flow(numbers_list, is_super_admin=False):
+    try:
+        if not is_super_admin:
+            return False
+        
+        if len(numbers_list) < 2:
+            return False
+        
+        pattern = []
+        for num in numbers_list:
+            num = int(num)
+            if num >= 5:
+                pattern.append("B")
+            else:
+                pattern.append("S")
+        
+        pattern_str = "-".join(pattern)
+        
+        if "pattern_history" not in ALGORITHM_STATS:
+            ALGORITHM_STATS["pattern_history"] = []
+        
+        existing_patterns = [item["pattern"] for item in ALGORITHM_STATS["pattern_history"]]
+        
+        if pattern_str in existing_patterns:
+            logger.info(f"⚠️ Pattern {pattern_str} already algorithm mein hai. SKIP.")
+            ALGORITHM_STATS["skipped_pattern"] = ALGORITHM_STATS.get("skipped_pattern", 0) + 1
+            return False
+        
+        ALGORITHM_STATS["pattern_history"].append({
+            "pattern": pattern_str,
+            "numbers": numbers_list.copy(),
+            "time": datetime.now().isoformat(),
+            "by": "Super Admin"
+        })
+        
+        if len(ALGORITHM_STATS["pattern_history"]) > 100:
+            ALGORITHM_STATS["pattern_history"].pop(0)
+        
+        logger.info(f"✅ Naya pattern add kiya: {pattern_str} ({numbers_list})")
+        return True
+    except Exception as e:
+        logger.error(f"Pattern add error: {e}")
+        return False
+
 def add_result_to_history(number, is_super_admin=False):
     try:
         num = int(number)
@@ -1507,6 +1553,7 @@ def add_result_to_history(number, is_super_admin=False):
                 else:
                     HISTORICAL_RESULTS.append(num)
                     CLASSIFIED_RESULTS.append({"number": num, "size": get_size(num)})
+                    logger.info(f"✅ Naya number add kiya: {num}")
                 
                 if len(HISTORICAL_RESULTS) > 1500:
                     HISTORICAL_RESULTS.pop(0)
@@ -1519,20 +1566,240 @@ def add_result_to_history(number, is_super_admin=False):
                 ALGORITHM_STATS["daily_additions"][today] += 1
                 ALGORITHM_STATS["last_updated"] = datetime.now().isoformat()
                 
+                prev_num = None
+                if len(HISTORICAL_RESULTS) >= 2:
+                    prev_num = HISTORICAL_RESULTS[-2]
+                
                 ALGORITHM_STATS["new_numbers_history"].append({
                     "number": num,
                     "size": "BIG" if num >= 5 else "SMALL",
+                    "previous": prev_num,
                     "time": datetime.now().isoformat(),
                     "by": "Super Admin"
                 })
-                if len(ALGORITHM_STATS["new_numbers_history"]) > 50:
+                if len(ALGORITHM_STATS["new_numbers_history"]) > 100:
                     ALGORITHM_STATS["new_numbers_history"].pop(0)
                 
-                logger.info(f"✅ Super Admin number added to algorithm: {num}")
+                logger.info(f"✅ Super Admin number added: {prev_num} → {num}")
                 return True
             else:
                 ALGORITHM_STATS["skipped_by_players"] += 1
-                logger.info(f"⚠️ Normal player number SKIPPED: {num}")
+                logger.info(f"⚠️ Normal player number skipped: {num}")
+                return False
+    except:
+        pass
+    return False
+
+def predict_next_with_history():
+    if len(HISTORICAL_RESULTS) < 2:
+        return {"prediction": "BALANCED", "confidence": "50%"}
+    
+    last_number = HISTORICAL_RESULTS[-1]
+    analysis = get_prediction_with_analysis(last_number)
+    
+    if not analysis['candidates']:
+        return {"prediction": "BALANCED", "confidence": "50%"}
+    
+    top = analysis['candidates'][0]
+    confidence = min(int((top['count'] / analysis['total_matches']) * 100), 95)
+    
+    return {
+        "prediction": top['size'],
+        "number": top['number'],
+        "confidence": f"{confidence}%",
+        "frequency": top['count'],
+        "total_matches": analysis['total_matches'],
+        "candidates": analysis['candidates']
+    }
+
+def get_analysis_report():
+    stats = get_statistics()
+    total = len(HISTORICAL_RESULTS)
+    
+    pred = predict_next_with_history()
+    
+    report = f"""
+📊 *BIG/SMALL ANALYSIS REPORT*
+━━━━━━━━━━━━━━━━━━━━━━
+📈 Total Results: {total}
+🔴 BIG: {stats['BIG']} ({stats['BIG']/total*100:.1f}%)
+🔵 SMALL: {stats['SMALL']} ({stats['SMALL']/total*100:.1f}%)
+━━━━━━━━━━━━━━━━━━━━━━
+📊 Last 10 Results:
+"""
+    for i, r in enumerate(CLASSIFIED_RESULTS[-10:], 1):
+        emoji = "🟥" if r["size"] == "BIG" else "🟦"
+        report += f"{i}. {r['number']} → {emoji} {r['size']}\n"
+    
+    report += f"""
+━━━━━━━━━━━━━━━━━━━━━━
+🔮 Next Prediction: {pred['prediction']}
+🎯 Confidence: {pred['confidence']}
+📊 Based on: {pred['total_matches']} historical matches
+"""
+    return report# ==========================================
+# ⭐ HISTORICAL ANALYSIS ALGORITHM
+# ==========================================
+def get_next_numbers_after(current_number):
+    current = int(current_number)
+    next_numbers = []
+    for i in range(len(HISTORICAL_RESULTS) - 1):
+        if HISTORICAL_RESULTS[i] == current:
+            next_numbers.append(HISTORICAL_RESULTS[i + 1])
+    return next_numbers
+
+def get_frequency_analysis(current_number):
+    next_numbers = get_next_numbers_after(current_number)
+    frequency = {}
+    for num in next_numbers:
+        frequency[num] = frequency.get(num, 0) + 1
+    return frequency
+
+def get_sorted_candidates(current_number):
+    frequency = get_frequency_analysis(current_number)
+    sorted_candidates = sorted(frequency.items(), key=lambda x: x[1], reverse=True)
+    return sorted_candidates
+
+def get_prediction_with_analysis(current_number):
+    current = int(current_number)
+    sorted_candidates = get_sorted_candidates(current)
+    
+    if not sorted_candidates:
+        return {
+            'current': current,
+            'candidates': [],
+            'top_prediction': None,
+            'top_size': None,
+            'total_matches': 0,
+            'message': "⚠️ No historical data found for this number!"
+        }
+    
+    candidates = []
+    for num, count in sorted_candidates[:5]:
+        size = "BIG" if num >= 5 else "SMALL"
+        candidates.append({
+            'number': num,
+            'count': count,
+            'size': size
+        })
+    
+    top = candidates[0] if candidates else None
+    
+    return {
+        'current': current,
+        'candidates': candidates,
+        'top_prediction': top['number'] if top else None,
+        'top_size': top['size'] if top else None,
+        'total_matches': sum(count for _, count in sorted_candidates),
+        'message': f"✅ Found {len(sorted_candidates)} unique numbers after {current}"
+    }
+
+def add_pattern_flow(numbers_list, is_super_admin=False):
+    try:
+        if not is_super_admin:
+            return False
+        
+        if len(numbers_list) < 2:
+            return False
+        
+        pattern = []
+        for num in numbers_list:
+            num = int(num)
+            if num >= 5:
+                pattern.append("B")
+            else:
+                pattern.append("S")
+        
+        pattern_str = "-".join(pattern)
+        
+        if "pattern_history" not in ALGORITHM_STATS:
+            ALGORITHM_STATS["pattern_history"] = []
+        
+        existing_patterns = [item["pattern"] for item in ALGORITHM_STATS["pattern_history"]]
+        
+        if pattern_str in existing_patterns:
+            logger.info(f"⚠️ Pattern {pattern_str} already algorithm mein hai. SKIP.")
+            ALGORITHM_STATS["skipped_pattern"] = ALGORITHM_STATS.get("skipped_pattern", 0) + 1
+            return False
+        
+        ALGORITHM_STATS["pattern_history"].append({
+            "pattern": pattern_str,
+            "numbers": numbers_list.copy(),
+            "time": datetime.now().isoformat(),
+            "by": "Super Admin"
+        })
+        
+        if len(ALGORITHM_STATS["pattern_history"]) > 100:
+            ALGORITHM_STATS["pattern_history"].pop(0)
+        
+        logger.info(f"✅ Naya pattern add kiya: {pattern_str} ({numbers_list})")
+        return True
+    except Exception as e:
+        logger.error(f"Pattern add error: {e}")
+        return False
+
+def add_result_to_history(number, is_super_admin=False):
+    try:
+        num = int(number)
+        if 0 <= num <= 9:
+            if is_super_admin:
+                recent_history = HISTORICAL_RESULTS[-50:] if len(HISTORICAL_RESULTS) > 50 else HISTORICAL_RESULTS
+                number_exists = num in recent_history
+                
+                if number_exists:
+                    logger.info(f"⚠️ Number {num} already algorithm mein hai. SKIP.")
+                    ALGORITHM_STATS["skipped_duplicate"] = ALGORITHM_STATS.get("skipped_duplicate", 0) + 1
+                    return False
+                
+                detected, should_skip = detect_level4_pattern(num)
+                
+                if detected:
+                    logger.info(f"⚠️ 4-LEVEL DETECTED for {num}! Auto-change activated.")
+                    ALGORITHM_STATS["auto_changes"] += 1
+                    
+                    alternative = random.randint(0, 9)
+                    while alternative == num:
+                        alternative = random.randint(0, 9)
+                    
+                    HISTORICAL_RESULTS.append(alternative)
+                    CLASSIFIED_RESULTS.append({"number": alternative, "size": get_size(alternative)})
+                    logger.info(f"🔄 Auto-changed {num} → {alternative}")
+                    num = alternative
+                else:
+                    HISTORICAL_RESULTS.append(num)
+                    CLASSIFIED_RESULTS.append({"number": num, "size": get_size(num)})
+                    logger.info(f"✅ Naya number add kiya: {num}")
+                
+                if len(HISTORICAL_RESULTS) > 1500:
+                    HISTORICAL_RESULTS.pop(0)
+                    CLASSIFIED_RESULTS.pop(0)
+                
+                ALGORITHM_STATS["added_by_super_admin"] += 1
+                today = datetime.now().date().isoformat()
+                if today not in ALGORITHM_STATS["daily_additions"]:
+                    ALGORITHM_STATS["daily_additions"][today] = 0
+                ALGORITHM_STATS["daily_additions"][today] += 1
+                ALGORITHM_STATS["last_updated"] = datetime.now().isoformat()
+                
+                prev_num = None
+                if len(HISTORICAL_RESULTS) >= 2:
+                    prev_num = HISTORICAL_RESULTS[-2]
+                
+                ALGORITHM_STATS["new_numbers_history"].append({
+                    "number": num,
+                    "size": "BIG" if num >= 5 else "SMALL",
+                    "previous": prev_num,
+                    "time": datetime.now().isoformat(),
+                    "by": "Super Admin"
+                })
+                if len(ALGORITHM_STATS["new_numbers_history"]) > 100:
+                    ALGORITHM_STATS["new_numbers_history"].pop(0)
+                
+                logger.info(f"✅ Super Admin number added: {prev_num} → {num}")
+                return True
+            else:
+                ALGORITHM_STATS["skipped_by_players"] += 1
+                logger.info(f"⚠️ Normal player number skipped: {num}")
                 return False
     except:
         pass
@@ -2491,14 +2758,7 @@ async def teach_panel(update, context):
         if new_numbers:
             for i, item in enumerate(reversed(new_numbers), 1):
                 time_str = item.get("time", "")[11:16] if len(item.get("time", "")) >= 16 else ""
-                num = item.get("number", "?")
-                prev = item.get("previous", None)
-                size = item.get("size", "?")
-                
-                if prev is not None:
-                    numbers_list += f"├─ {i}. {prev} → {num} ({size}) - {time_str}\n"
-                else:
-                    numbers_list += f"├─ {i}. {num} ({size}) - {time_str}\n"
+                numbers_list += f"├─ {i}. {item['number']} ({item['size']}) - {time_str}\n"
         else:
             numbers_list = "├─ No numbers added yet\n"
         
