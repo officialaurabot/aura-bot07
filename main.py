@@ -2273,7 +2273,9 @@ def predict_next_with_history():
         "frequency": top['count'],
         "total_matches": analysis['total_matches'],
         "candidates": analysis['candidates']
-    }def add_result_to_history(number, is_super_admin=False):
+    
+    
+    def add_result_to_history(number, is_super_admin=False):
     try:
         num = int(number)
         if 0 <= num <= 9:
