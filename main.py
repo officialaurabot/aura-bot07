@@ -29,9 +29,12 @@ class HealthHandler(BaseHTTPRequestHandler):
         pass
 
 def run_health_server():
-    port = int(os.environ.get('PORT', 10000))
-    server = HTTPServer(('0.0.0.0', port), HealthHandler)
-    server.serve_forever()
+    try:
+        port = int(os.environ.get('PORT', 10000))
+        server = HTTPServer(('0.0.0.0', port), HealthHandler)
+        server.serve_forever()
+    except Exception as e:
+        logging.error(f"Health server error: {e}")
 
 # ==========================================
 # SETUP
@@ -224,6 +227,7 @@ ALGORITHM_STATS = {
     "skipped_duplicate": 0,
     "skipped_pattern": 0,
     "pattern_history": [],
+    "pattern_tracker": [],
     "daily_additions": {},
     "last_updated": datetime.now().isoformat(),
     "total_added_today": 0,
@@ -231,6 +235,7 @@ ALGORITHM_STATS = {
     "level4_detections": 0,
     "auto_changes": 0
 }
+
 # ==========================================
 # ⭐ CONCURRENT PLAYERS LOCK (OPTIMIZED FOR 200+)
 # ==========================================
@@ -399,14 +404,25 @@ async def daily_bonus(update, context):
     
     async with get_user_lock(uid):
         users = safe_load_json("users.json")
-        if uid in users:
-            users[uid]['win_count'] = users[uid].get('win_count', 0) + bonus
-            await safe_save_json("users.json", users)
+        if uid not in users:
+            users[uid] = {
+                "id": uid,
+                "win_count": 0,
+                "loss_count": 0,
+                "level": 1,
+                "joined": str(datetime.now()),
+                "username": update.effective_user.username or "Unknown",
+                "achievements": {"unlocked": []},
+                "last_active": datetime.now().isoformat()
+            }
+        users[uid]['win_count'] = users[uid].get('win_count', 0) + bonus
+        await safe_save_json("users.json", users)
+        total_wins = users[uid]['win_count']
     
     DAILY_BONUS_TRACKER[uid]['last_claimed'] = today
     
     await update.message.reply_text(
-        f"🎁 *DAILY BONUS CLAIMED!* 🎁\n━━━━━━━━━━━━━━━━━━━━━━\n✅ +{bonus} Free Wins!\n📊 Total Wins: {users[uid]['win_count']}\n━━━━━━━━━━━━━━━━━━━━━━\n🔥 Come back tomorrow for more!",
+        f"🎁 *DAILY BONUS CLAIMED!* 🎁\n━━━━━━━━━━━━━━━━━━━━━━\n✅ +{bonus} Free Wins!\n📊 Total Wins: {total_wins}\n━━━━━━━━━━━━━━━━━━━━━━\n🔥 Come back tomorrow for more!",
         parse_mode='Markdown'
     )
 
@@ -1588,221 +1604,6 @@ def add_result_to_history(number, is_super_admin=False):
                 if len(ALGORITHM_STATS["new_numbers_history"]) > 100:
                     ALGORITHM_STATS["new_numbers_history"].pop(0)
                 
-                logger.info(f"✅ Super Admin number added: {prev_num} → {num}")
-                return True
-            else:
-                ALGORITHM_STATS["skipped_by_players"] += 1
-                logger.info(f"⚠️ Normal player number skipped: {num}")
-                return False
-    except:
-        pass
-    return False
-
-def predict_next_with_history():
-    if len(HISTORICAL_RESULTS) < 2:
-        return {"prediction": "BALANCED", "confidence": "50%"}
-    
-    last_number = HISTORICAL_RESULTS[-1]
-    analysis = get_prediction_with_analysis(last_number)
-    
-    if not analysis['candidates']:
-        return {"prediction": "BALANCED", "confidence": "50%"}
-    
-    top = analysis['candidates'][0]
-    confidence = min(int((top['count'] / analysis['total_matches']) * 100), 95)
-    
-    return {
-        "prediction": top['size'],
-        "number": top['number'],
-        "confidence": f"{confidence}%",
-        "frequency": top['count'],
-        "total_matches": analysis['total_matches'],
-        "candidates": analysis['candidates']
-    }
-
-def get_analysis_report():
-    stats = get_statistics()
-    total = len(HISTORICAL_RESULTS)
-    
-    pred = predict_next_with_history()
-    
-    report = f"""
-📊 *BIG/SMALL ANALYSIS REPORT*
-━━━━━━━━━━━━━━━━━━━━━━
-📈 Total Results: {total}
-🔴 BIG: {stats['BIG']} ({stats['BIG']/total*100:.1f}%)
-🔵 SMALL: {stats['SMALL']} ({stats['SMALL']/total*100:.1f}%)
-━━━━━━━━━━━━━━━━━━━━━━
-📊 Last 10 Results:
-"""
-    for i, r in enumerate(CLASSIFIED_RESULTS[-10:], 1):
-        emoji = "🟥" if r["size"] == "BIG" else "🟦"
-        report += f"{i}. {r['number']} → {emoji} {r['size']}\n"
-    
-    report += f"""
-━━━━━━━━━━━━━━━━━━━━━━
-🔮 Next Prediction: {pred['prediction']}
-🎯 Confidence: {pred['confidence']}
-📊 Based on: {pred['total_matches']} historical matches
-"""
-    return report# ==========================================
-# ⭐ HISTORICAL ANALYSIS ALGORITHM
-# ==========================================
-def get_next_numbers_after(current_number):
-    current = int(current_number)
-    next_numbers = []
-    for i in range(len(HISTORICAL_RESULTS) - 1):
-        if HISTORICAL_RESULTS[i] == current:
-            next_numbers.append(HISTORICAL_RESULTS[i + 1])
-    return next_numbers
-
-def get_frequency_analysis(current_number):
-    next_numbers = get_next_numbers_after(current_number)
-    frequency = {}
-    for num in next_numbers:
-        frequency[num] = frequency.get(num, 0) + 1
-    return frequency
-
-def get_sorted_candidates(current_number):
-    frequency = get_frequency_analysis(current_number)
-    sorted_candidates = sorted(frequency.items(), key=lambda x: x[1], reverse=True)
-    return sorted_candidates
-
-def get_prediction_with_analysis(current_number):
-    current = int(current_number)
-    sorted_candidates = get_sorted_candidates(current)
-    
-    if not sorted_candidates:
-        return {
-            'current': current,
-            'candidates': [],
-            'top_prediction': None,
-            'top_size': None,
-            'total_matches': 0,
-            'message': "⚠️ No historical data found for this number!"
-        }
-    
-    candidates = []
-    for num, count in sorted_candidates[:5]:
-        size = "BIG" if num >= 5 else "SMALL"
-        candidates.append({
-            'number': num,
-            'count': count,
-            'size': size
-        })
-    
-    top = candidates[0] if candidates else None
-    
-    return {
-        'current': current,
-        'candidates': candidates,
-        'top_prediction': top['number'] if top else None,
-        'top_size': top['size'] if top else None,
-        'total_matches': sum(count for _, count in sorted_candidates),
-        'message': f"✅ Found {len(sorted_candidates)} unique numbers after {current}"
-    }
-
-def add_pattern_flow(numbers_list, is_super_admin=False):
-    try:
-        if not is_super_admin:
-            return False
-        
-        if len(numbers_list) < 2:
-            return False
-        
-        pattern = []
-        for num in numbers_list:
-            num = int(num)
-            if num >= 5:
-                pattern.append("B")
-            else:
-                pattern.append("S")
-        
-        pattern_str = "-".join(pattern)
-        
-        if "pattern_history" not in ALGORITHM_STATS:
-            ALGORITHM_STATS["pattern_history"] = []
-        
-        existing_patterns = [item["pattern"] for item in ALGORITHM_STATS["pattern_history"]]
-        
-        if pattern_str in existing_patterns:
-            logger.info(f"⚠️ Pattern {pattern_str} already algorithm mein hai. SKIP.")
-            ALGORITHM_STATS["skipped_pattern"] = ALGORITHM_STATS.get("skipped_pattern", 0) + 1
-            return False
-        
-        ALGORITHM_STATS["pattern_history"].append({
-            "pattern": pattern_str,
-            "numbers": numbers_list.copy(),
-            "time": datetime.now().isoformat(),
-            "by": "Super Admin"
-        })
-        
-        if len(ALGORITHM_STATS["pattern_history"]) > 100:
-            ALGORITHM_STATS["pattern_history"].pop(0)
-        
-        logger.info(f"✅ Naya pattern add kiya: {pattern_str} ({numbers_list})")
-        return True
-    except Exception as e:
-        logger.error(f"Pattern add error: {e}")
-        return False
-
-def add_result_to_history(number, is_super_admin=False):
-    try:
-        num = int(number)
-        if 0 <= num <= 9:
-            if is_super_admin:
-                recent_history = HISTORICAL_RESULTS[-50:] if len(HISTORICAL_RESULTS) > 50 else HISTORICAL_RESULTS
-                number_exists = num in recent_history
-                
-                if number_exists:
-                    logger.info(f"⚠️ Number {num} already algorithm mein hai. SKIP.")
-                    ALGORITHM_STATS["skipped_duplicate"] = ALGORITHM_STATS.get("skipped_duplicate", 0) + 1
-                    return False
-                
-                detected, should_skip = detect_level4_pattern(num)
-                
-                if detected:
-                    logger.info(f"⚠️ 4-LEVEL DETECTED for {num}! Auto-change activated.")
-                    ALGORITHM_STATS["auto_changes"] += 1
-                    
-                    alternative = random.randint(0, 9)
-                    while alternative == num:
-                        alternative = random.randint(0, 9)
-                    
-                    HISTORICAL_RESULTS.append(alternative)
-                    CLASSIFIED_RESULTS.append({"number": alternative, "size": get_size(alternative)})
-                    logger.info(f"🔄 Auto-changed {num} → {alternative}")
-                    num = alternative
-                else:
-                    HISTORICAL_RESULTS.append(num)
-                    CLASSIFIED_RESULTS.append({"number": num, "size": get_size(num)})
-                    logger.info(f"✅ Naya number add kiya: {num}")
-                
-                if len(HISTORICAL_RESULTS) > 1500:
-                    HISTORICAL_RESULTS.pop(0)
-                    CLASSIFIED_RESULTS.pop(0)
-                
-                ALGORITHM_STATS["added_by_super_admin"] += 1
-                today = datetime.now().date().isoformat()
-                if today not in ALGORITHM_STATS["daily_additions"]:
-                    ALGORITHM_STATS["daily_additions"][today] = 0
-                ALGORITHM_STATS["daily_additions"][today] += 1
-                ALGORITHM_STATS["last_updated"] = datetime.now().isoformat()
-                
-                prev_num = None
-                if len(HISTORICAL_RESULTS) >= 2:
-                    prev_num = HISTORICAL_RESULTS[-2]
-                
-                ALGORITHM_STATS["new_numbers_history"].append({
-                    "number": num,
-                    "size": "BIG" if num >= 5 else "SMALL",
-                    "previous": prev_num,
-                    "time": datetime.now().isoformat(),
-                    "by": "Super Admin"
-                })
-                if len(ALGORITHM_STATS["new_numbers_history"]) > 100:
-                    ALGORITHM_STATS["new_numbers_history"].pop(0)
-                
                 size = "BIG" if num >= 5 else "SMALL"
                 if 'pattern_tracker' not in ALGORITHM_STATS:
                     ALGORITHM_STATS['pattern_tracker'] = []
@@ -1824,13 +1625,11 @@ def add_result_to_history(number, is_super_admin=False):
         pass
     return False
 
-
 def get_big_small_sequence(results, count=20):
     seq = []
     for num in results[-count:]:
         seq.append("BIG" if int(num) >= 5 else "SMALL")
     return seq
-
 
 def detect_zigzag(seq):
     if len(seq) < 4:
@@ -1842,7 +1641,6 @@ def detect_zigzag(seq):
         return "SMALL"
     return None
 
-
 def detect_2_1_pattern(seq):
     if len(seq) < 6:
         return None
@@ -1853,7 +1651,6 @@ def detect_2_1_pattern(seq):
         return "SMALL"
     return None
 
-
 def detect_streak(seq):
     if len(seq) < 3:
         return None
@@ -1863,7 +1660,6 @@ def detect_streak(seq):
     if last3 == ["SMALL", "SMALL", "SMALL"]:
         return "SMALL"
     return None
-
 
 def detect_majority(seq):
     if len(seq) < 10:
@@ -1877,7 +1673,6 @@ def detect_majority(seq):
         return "BIG"
     return None
 
-
 def detect_4level_pattern(seq):
     if len(seq) < 4:
         return None
@@ -1886,7 +1681,6 @@ def detect_4level_pattern(seq):
         return last4[0]
     return None
 
-
 def detect_5level_reverse(seq):
     if len(seq) < 5:
         return None
@@ -1894,1061 +1688,6 @@ def detect_5level_reverse(seq):
     if last5[0] == last5[1] == last5[2] == last5[3] == last5[4]:
         return "SMALL" if last5[0] == "BIG" else "BIG"
     return None
-
-
-def predict_next_with_history():
-    if len(HISTORICAL_RESULTS) < 2:
-        return {"prediction": "BALANCED", "confidence": "50%", "number": None, "pattern": "NONE"}
-    
-    seq = get_big_small_sequence(HISTORICAL_RESULTS, 20)
-    
-    last_number = HISTORICAL_RESULTS[-1]
-    analysis = get_prediction_with_analysis(last_number)
-    
-    def get_target_num(pred_size):
-        if analysis['candidates']:
-            for cand in analysis['candidates']:
-                if cand['size'] == pred_size:
-                    return cand['number']
-        if pred_size == "BIG":
-            return random.randint(5, 9)
-        else:
-            return random.randint(0, 4)
-    
-        # PRIORITY 1: 5-Level Reverse
-    reverse_5 = detect_5level_reverse(seq)
-    if reverse_5:
-        return {
-            "prediction": reverse_5,
-            "number": get_target_num(reverse_5),
-            "confidence": "90%",
-            "pattern": "5-LEVEL REVERSE",
-            "frequency": 1,
-            "total_matches": 1,
-            "candidates": analysis['candidates'] if analysis['candidates'] else []
-        }
-    
-    # PRIORITY 2: 4-Level Streak
-    streak_4 = detect_4level_pattern(seq)
-    if streak_4:
-        return {
-            "prediction": streak_4,
-            "number": get_target_num(streak_4),
-            "confidence": "88%",
-            "pattern": "4-LEVEL STREAK",
-            "frequency": 1,
-            "total_matches": 1,
-            "candidates": analysis['candidates'] if analysis['candidates'] else []
-        }
-    
-    # PRIORITY 3: 3-Level Streak
-    streak_3 = detect_streak(seq)
-    if streak_3:
-        return {
-            "prediction": streak_3,
-            "number": get_target_num(streak_3),
-            "confidence": "82%",
-            "pattern": "3-LEVEL STREAK",
-            "frequency": 1,
-            "total_matches": 1,
-            "candidates": analysis['candidates'] if analysis['candidates'] else []
-        }
-    
-    # PRIORITY 4: Zig-Zag
-    zigzag_pred = detect_zigzag(seq)
-    if zigzag_pred:
-        return {
-            "prediction": zigzag_pred,
-            "number": get_target_num(zigzag_pred),
-            "confidence": "85%",
-            "pattern": "ZIG-ZAG",
-            "frequency": 1,
-            "total_matches": 1,
-            "candidates": analysis['candidates'] if analysis['candidates'] else []
-        }
-    
-    # PRIORITY 5: 2-1 Pattern
-    pattern_2_1 = detect_2_1_pattern(seq)
-    if pattern_2_1:
-        return {
-            "prediction": pattern_2_1,
-            "number": get_target_num(pattern_2_1),
-            "confidence": "78%",
-            "pattern": "2-1 PATTERN",
-            "frequency": 1,
-            "total_matches": 1,
-            "candidates": analysis['candidates'] if analysis['candidates'] else []
-        }
-    
-    # PRIORITY 6: Majority Reversal
-    majority_pred = detect_majority(seq)
-    if majority_pred:
-        return {
-            "prediction": majority_pred,
-            "number": get_target_num(majority_pred),
-            "confidence": "62%",
-            "pattern": "MAJORITY REVERSAL",
-            "frequency": 1,
-            "total_matches": 1,
-            "candidates": analysis['candidates'] if analysis['candidates'] else []
-        }
-    
-    # PRIORITY 7: Historical Fallback
-    if not analysis['candidates']:
-        return {"prediction": "BALANCED", "confidence": "50%", "number": None, "pattern": "NONE"}
-    
-    top = analysis['candidates'][0]
-    confidence = min(int((top['count'] / analysis['total_matches']) * 100), 95)
-    
-    return {
-        "prediction": top['size'],
-        "number": top['number'],
-        "confidence": f"{confidence}%",
-        "pattern": "HISTORICAL",
-        "frequency": top['count'],
-        "total_matches": analysis['total_matches'],
-        "candidates": analysis['candidates']
-    }
-
-
-def add_result_to_history(number, is_super_admin=False):
-    try:
-        num = int(number)
-        if 0 <= num <= 9:
-            if is_super_admin:
-                recent_history = HISTORICAL_RESULTS[-50:] if len(HISTORICAL_RESULTS) > 50 else HISTORICAL_RESULTS
-                number_exists = num in recent_history
-                
-                if number_exists:
-                    logger.info(f"⚠️ Number {num} already algorithm mein hai. SKIP.")
-                    ALGORITHM_STATS["skipped_duplicate"] = ALGORITHM_STATS.get("skipped_duplicate", 0) + 1
-                    return False
-                
-                detected, should_skip = detect_level4_pattern(num)
-                
-                if detected:
-                    logger.info(f"⚠️ 4-LEVEL DETECTED for {num}! Auto-change activated.")
-                    ALGORITHM_STATS["auto_changes"] += 1
-                    
-                    alternative = random.randint(0, 9)
-                    while alternative == num:
-                        alternative = random.randint(0, 9)
-                    
-                    HISTORICAL_RESULTS.append(alternative)
-                    CLASSIFIED_RESULTS.append({"number": alternative, "size": get_size(alternative)})
-                    logger.info(f"🔄 Auto-changed {num} → {alternative}")
-                    num = alternative
-                else:
-                    HISTORICAL_RESULTS.append(num)
-                    CLASSIFIED_RESULTS.append({"number": num, "size": get_size(num)})
-                    logger.info(f"✅ Naya number add kiya: {num}")
-                
-                if len(HISTORICAL_RESULTS) > 1500:
-                    HISTORICAL_RESULTS.pop(0)
-                    CLASSIFIED_RESULTS.pop(0)
-                
-                ALGORITHM_STATS["added_by_super_admin"] += 1
-                today = datetime.now().date().isoformat()
-                if today not in ALGORITHM_STATS["daily_additions"]:
-                    ALGORITHM_STATS["daily_additions"][today] = 0
-                ALGORITHM_STATS["daily_additions"][today] += 1
-                ALGORITHM_STATS["last_updated"] = datetime.now().isoformat()
-                
-                prev_num = None
-                if len(HISTORICAL_RESULTS) >= 2:
-                    prev_num = HISTORICAL_RESULTS[-2]
-                
-                ALGORITHM_STATS["new_numbers_history"].append({
-                    "number": num,
-                    "size": "BIG" if num >= 5 else "SMALL",
-                    "previous": prev_num,
-                    "time": datetime.now().isoformat(),
-                    "by": "Super Admin"
-                })
-                if len(ALGORITHM_STATS["new_numbers_history"]) > 100:
-                    ALGORITHM_STATS["new_numbers_history"].pop(0)
-                
-                size = "BIG" if num >= 5 else "SMALL"
-                if 'pattern_tracker' not in ALGORITHM_STATS:
-                    ALGORITHM_STATS['pattern_tracker'] = []
-                ALGORITHM_STATS['pattern_tracker'].append({
-                    'number': num,
-                    'size': size,
-                    'time': datetime.now().isoformat()
-                })
-                if len(ALGORITHM_STATS['pattern_tracker']) > 100:
-                    ALGORITHM_STATS['pattern_tracker'].pop(0)
-                
-                logger.info(f"✅ Super Admin number added: {prev_num} → {num}")
-                return True
-            else:
-                ALGORITHM_STATS["skipped_by_players"] += 1
-                logger.info(f"⚠️ Normal player number skipped: {num}")
-                return False
-    except:
-        pass
-    return False
-
-
-def get_big_small_sequence(results, count=20):
-    seq = []
-    for num in results[-count:]:
-        seq.append("BIG" if int(num) >= 5 else "SMALL")
-    return seq
-
-
-def detect_zigzag(seq):
-    if len(seq) < 4:
-        return None
-    last4 = seq[-4:]
-    if last4 == ["BIG", "SMALL", "BIG", "SMALL"]:
-        return "BIG"
-    if last4 == ["SMALL", "BIG", "SMALL", "BIG"]:
-        return "SMALL"
-    return None
-
-
-def detect_2_1_pattern(seq):
-    if len(seq) < 6:
-        return None
-    last6 = seq[-6:]
-    if last6 == ["BIG", "BIG", "SMALL", "BIG", "BIG", "SMALL"]:
-        return "BIG"
-    if last6 == ["SMALL", "SMALL", "BIG", "SMALL", "SMALL", "BIG"]:
-        return "SMALL"
-    return None
-
-
-def detect_streak(seq):
-    if len(seq) < 3:
-        return None
-    last3 = seq[-3:]
-    if last3 == ["BIG", "BIG", "BIG"]:
-        return "BIG"
-    if last3 == ["SMALL", "SMALL", "SMALL"]:
-        return "SMALL"
-    return None
-
-
-def detect_majority(seq):
-    if len(seq) < 10:
-        return None
-    last10 = seq[-10:]
-    big_count = last10.count("BIG")
-    small_count = last10.count("SMALL")
-    if big_count >= 7:
-        return "SMALL"
-    if small_count >= 7:
-        return "BIG"
-    return None
-
-
-def detect_4level_pattern(seq):
-    if len(seq) < 4:
-        return None
-    last4 = seq[-4:]
-    if last4[0] == last4[1] == last4[2] == last4[3]:
-        return last4[0]
-    return None
-
-
-def detect_5level_reverse(seq):
-    if len(seq) < 5:
-        return None
-    last5 = seq[-5:]
-    if last5[0] == last5[1] == last5[2] == last5[3] == last5[4]:
-        return "SMALL" if last5[0] == "BIG" else "BIG"
-    return None
-
-
-def predict_next_with_history():
-    if len(HISTORICAL_RESULTS) < 2:
-        return {"prediction": "BALANCED", "confidence": "50%", "number": None, "pattern": "NONE"}
-    
-    seq = get_big_small_sequence(HISTORICAL_RESULTS, 20)
-    
-    last_number = HISTORICAL_RESULTS[-1]
-    analysis = get_prediction_with_analysis(last_number)
-    
-    def get_target_num(pred_size):
-        if analysis['candidates']:
-            for cand in analysis['candidates']:
-                if cand['size'] == pred_size:
-                    return cand['number']
-        if pred_size == "BIG":
-            return random.randint(5, 9)
-        else:
-            return random.randint(0, 4)
-    
-    # PRIORITY 1: 5-Level Reverse
-    reverse_5 = detect_5level_reverse(seq)
-    if reverse_5:
-        return {
-            "prediction": reverse_5,
-            "number": get_target_num(reverse_5),
-            "confidence": "90%",
-            "pattern": "5-LEVEL REVERSE",
-            "frequency": 1,
-            "total_matches": 1,
-            "candidates": analysis['candidates'] if analysis['candidates'] else []
-        }
-    
-    # PRIORITY 2: 4-Level Streak
-    streak_4 = detect_4level_pattern(seq)
-    if streak_4:
-        return {
-            "prediction": streak_4,
-            "number": get_target_num(streak_4),
-            "confidence": "88%",
-            "pattern": "4-LEVEL STREAK",
-            "frequency": 1,
-            "total_matches": 1,
-            "candidates": analysis['candidates'] if analysis['candidates'] else []
-        }
-    
-    # PRIORITY 3: 3-Level Streak
-    streak_3 = detect_streak(seq)
-    if streak_3:
-        return {
-            "prediction": streak_3,
-            "number": get_target_num(streak_3),
-            "confidence": "82%",
-            "pattern": "3-LEVEL STREAK",
-            "frequency": 1,
-            "total_matches": 1,
-            "candidates": analysis['candidates'] if analysis['candidates'] else []
-        }
-    
-    # PRIORITY 4: Zig-Zag
-    zigzag_pred = detect_zigzag(seq)
-    if zigzag_pred:
-        return {
-            "prediction": zigzag_pred,
-            "number": get_target_num(zigzag_pred),
-            "confidence": "85%",
-            "pattern": "ZIG-ZAG",
-            "frequency": 1,
-            "total_matches": 1,
-            "candidates": analysis['candidates'] if analysis['candidates'] else []
-        }
-    
-    # PRIORITY 5: 2-1 Pattern
-    pattern_2_1 = detect_2_1_pattern(seq)
-    if pattern_2_1:
-        return {
-            "prediction": pattern_2_1,
-            "number": get_target_num(pattern_2_1),
-            "confidence": "78%",
-            "pattern": "2-1 PATTERN",
-            "frequency": 1,
-            "total_matches": 1,
-            "candidates": analysis['candidates'] if analysis['candidates'] else []
-        }
-    
-    # PRIORITY 6: Majority Reversal
-    majority_pred = detect_majority(seq)
-    if majority_pred:
-        return {
-            "prediction": majority_pred,
-            "number": get_target_num(majority_pred),
-            "confidence": "62%",
-            "pattern": "MAJORITY REVERSAL",
-            "frequency": 1,
-            "total_matches": 1,
-            "candidates": analysis['candidates'] if analysis['candidates'] else []
-        }
-    
-    # PRIORITY 7: Historical Fallback
-    if not analysis['candidates']:
-        return {"prediction": "BALANCED", "confidence": "50%", "number": None, "pattern": "NONE"}
-    
-    top = analysis['candidates'][0]
-    confidence = min(int((top['count'] / analysis['total_matches']) * 100), 95)
-    
-        return {
-        "prediction": top['size'],
-        "number": top['number'],
-        "confidence": f"{confidence}%",
-        "pattern": "HISTORICAL",
-        "frequency": top['count'],
-        "total_matches": analysis['total_matches'],
-        "candidates": analysis['candidates']
-    }
-
-
-def add_result_to_history(number, is_super_admin=False):
-    try:
-        num = int(number)
-        if 0 <= num <= 9:
-            if is_super_admin:
-                recent_history = HISTORICAL_RESULTS[-50:] if len(HISTORICAL_RESULTS) > 50 else HISTORICAL_RESULTS
-                number_exists = num in recent_history
-                
-                if number_exists:
-                    logger.info(f"⚠️ Number {num} already algorithm mein hai. SKIP.")
-                    ALGORITHM_STATS["skipped_duplicate"] = ALGORITHM_STATS.get("skipped_duplicate", 0) + 1
-                    return False
-                
-                detected, should_skip = detect_level4_pattern(num)
-                
-                if detected:
-                    logger.info(f"⚠️ 4-LEVEL DETECTED for {num}! Auto-change activated.")
-                    ALGORITHM_STATS["auto_changes"] += 1
-                    
-                    alternative = random.randint(0, 9)
-                    while alternative == num:
-                        alternative = random.randint(0, 9)
-                    
-                    HISTORICAL_RESULTS.append(alternative)
-                    CLASSIFIED_RESULTS.append({"number": alternative, "size": get_size(alternative)})
-                    logger.info(f"🔄 Auto-changed {num} → {alternative}")
-                    num = alternative
-                else:
-                    HISTORICAL_RESULTS.append(num)
-                    CLASSIFIED_RESULTS.append({"number": num, "size": get_size(num)})
-                    logger.info(f"✅ Naya number add kiya: {num}")
-                
-                if len(HISTORICAL_RESULTS) > 1500:
-                    HISTORICAL_RESULTS.pop(0)
-                    CLASSIFIED_RESULTS.pop(0)
-                
-                ALGORITHM_STATS["added_by_super_admin"] += 1
-                today = datetime.now().date().isoformat()
-                if today not in ALGORITHM_STATS["daily_additions"]:
-                    ALGORITHM_STATS["daily_additions"][today] = 0
-                ALGORITHM_STATS["daily_additions"][today] += 1
-                ALGORITHM_STATS["last_updated"] = datetime.now().isoformat()
-                
-                prev_num = None
-                if len(HISTORICAL_RESULTS) >= 2:
-                    prev_num = HISTORICAL_RESULTS[-2]
-                
-                ALGORITHM_STATS["new_numbers_history"].append({
-                    "number": num,
-                    "size": "BIG" if num >= 5 else "SMALL",
-                    "previous": prev_num,
-                    "time": datetime.now().isoformat(),
-                    "by": "Super Admin"
-                })
-                if len(ALGORITHM_STATS["new_numbers_history"]) > 100:
-                    ALGORITHM_STATS["new_numbers_history"].pop(0)
-                
-                size = "BIG" if num >= 5 else "SMALL"
-                if 'pattern_tracker' not in ALGORITHM_STATS:
-                    ALGORITHM_STATS['pattern_tracker'] = []
-                ALGORITHM_STATS['pattern_tracker'].append({
-                    'number': num,
-                    'size': size,
-                    'time': datetime.now().isoformat()
-                })
-                if len(ALGORITHM_STATS['pattern_tracker']) > 100:
-                    ALGORITHM_STATS['pattern_tracker'].pop(0)
-                
-                logger.info(f"✅ Super Admin number added: {prev_num} → {num}")
-                return True
-            else:
-                ALGORITHM_STATS["skipped_by_players"] += 1
-                logger.info(f"⚠️ Normal player number skipped: {num}")
-                return False
-    except:
-        pass
-    return False
-
-
-def get_big_small_sequence(results, count=20):
-    seq = []
-    for num in results[-count:]:
-        seq.append("BIG" if int(num) >= 5 else "SMALL")
-    return seq
-
-
-def detect_zigzag(seq):
-    if len(seq) < 4:
-        return None
-    last4 = seq[-4:]
-    if last4 == ["BIG", "SMALL", "BIG", "SMALL"]:
-        return "BIG"
-    if last4 == ["SMALL", "BIG", "SMALL", "BIG"]:
-        return "SMALL"
-    return None
-
-
-def detect_2_1_pattern(seq):
-    if len(seq) < 6:
-        return None
-    last6 = seq[-6:]
-    if last6 == ["BIG", "BIG", "SMALL", "BIG", "BIG", "SMALL"]:
-        return "BIG"
-    if last6 == ["SMALL", "SMALL", "BIG", "SMALL", "SMALL", "BIG"]:
-        return "SMALL"
-    return None
-
-
-def detect_streak(seq):
-    if len(seq) < 3:
-        return None
-    last3 = seq[-3:]
-    if last3 == ["BIG", "BIG", "BIG"]:
-        return "BIG"
-    if last3 == ["SMALL", "SMALL", "SMALL"]:
-        return "SMALL"
-    return None
-
-
-def detect_majority(seq):
-    if len(seq) < 10:
-        return None
-    last10 = seq[-10:]
-    big_count = last10.count("BIG")
-    small_count = last10.count("SMALL")
-    if big_count >= 7:
-        return "SMALL"
-    if small_count >= 7:
-        return "BIG"
-    return None
-
-
-def detect_4level_pattern(seq):
-    if len(seq) < 4:
-        return None
-    last4 = seq[-4:]
-    if last4[0] == last4[1] == last4[2] == last4[3]:
-        return last4[0]
-    return None
-
-
-def detect_5level_reverse(seq):
-    if len(seq) < 5:
-        return None
-    last5 = seq[-5:]
-    if last5[0] == last5[1] == last5[2] == last5[3] == last5[4]:
-        return "SMALL" if last5[0] == "BIG" else "BIG"
-    return None
-
-
-def predict_next_with_history():
-    if len(HISTORICAL_RESULTS) < 2:
-        return {"prediction": "BALANCED", "confidence": "50%", "number": None, "pattern": "NONE"}
-    
-    seq = get_big_small_sequence(HISTORICAL_RESULTS, 20)
-    
-    last_number = HISTORICAL_RESULTS[-1]
-    analysis = get_prediction_with_analysis(last_number)
-    
-    def get_target_num(pred_size):
-        if analysis['candidates']:
-            for cand in analysis['candidates']:
-                if cand['size'] == pred_size:
-                    return cand['number']
-        if pred_size == "BIG":
-            return random.randint(5, 9)
-        else:
-            return random.randint(0, 4)
-    
-    # PRIORITY 1: 5-Level Reverse
-    reverse_5 = detect_5level_reverse(seq)
-    if reverse_5:
-        return {
-            "prediction": reverse_5,
-            "number": get_target_num(reverse_5),
-            "confidence": "90%",
-            "pattern": "5-LEVEL REVERSE",
-            "frequency": 1,
-            "total_matches": 1,
-            "candidates": analysis['candidates'] if analysis['candidates'] else []
-        }
-    
-    # PRIORITY 2: 4-Level Streak
-    streak_4 = detect_4level_pattern(seq)
-    if streak_4:
-        return {
-            "prediction": streak_4,
-            "number": get_target_num(streak_4),
-            "confidence": "88%",
-            "pattern": "4-LEVEL STREAK",
-            "frequency": 1,
-            "total_matches": 1,
-            "candidates": analysis['candidates'] if analysis['candidates'] else []
-        }
-    
-    # PRIORITY 3: 3-Level Streak
-    streak_3 = detect_streak(seq)
-    if streak_3:
-        return {
-            "prediction": streak_3,
-            "number": get_target_num(streak_3),
-            "confidence": "82%",
-            "pattern": "3-LEVEL STREAK",
-            "frequency": 1,
-            "total_matches": 1,
-            "candidates": analysis['candidates'] if analysis['candidates'] else []
-        }
-    
-    # PRIORITY 4: Zig-Zag
-    zigzag_pred = detect_zigzag(seq)
-    if zigzag_pred:
-        return {
-            "prediction": zigzag_pred,
-            "number": get_target_num(zigzag_pred),
-            "confidence": "85%",
-            "pattern": "ZIG-ZAG",
-            "frequency": 1,
-            "total_matches": 1,
-            "candidates": analysis['candidates'] if analysis['candidates'] else []
-        }
-    
-    # PRIORITY 5: 2-1 Pattern
-    pattern_2_1 = detect_2_1_pattern(seq)
-    if pattern_2_1:
-        return {
-            "prediction": pattern_2_1,
-            "number": get_target_num(pattern_2_1),
-            "confidence": "78%",
-            "pattern": "2-1 PATTERN",
-            "frequency": 1,
-            "total_matches": 1,
-            "candidates": analysis['candidates'] if analysis['candidates'] else []
-        }
-    
-    # PRIORITY 6: Majority Reversal
-    majority_pred = detect_majority(seq)
-    if majority_pred:
-        return {
-            "prediction": majority_pred,
-            "number": get_target_num(majority_pred),
-            "confidence": "62%",
-            "pattern": "MAJORITY REVERSAL",
-            "frequency": 1,
-            "total_matches": 1,
-            "candidates": analysis['candidates'] if analysis['candidates'] else []
-        }
-    
-    # PRIORITY 7: Historical Fallback
-    if not analysis['candidates']:
-        return {"prediction": "BALANCED", "confidence": "50%", "number": None, "pattern": "NONE"}
-    
-    top = analysis['candidates'][0]
-    confidence = min(int((top['count'] / analysis['total_matches']) * 100), 95)
-    
-    return {
-        "prediction": top['size'],
-        "number": top['number'],
-        "confidence": f"{confidence}%",
-        "pattern": "HISTORICAL",
-        "frequency": top['count'],
-        "total_matches": analysis['total_matches'],
-        "candidates": analysis['candidates']
-    }def add_result_to_history(number, is_super_admin=False):
-    try:
-        num = int(number)
-        if 0 <= num <= 9:
-            if is_super_admin:
-                recent_history = HISTORICAL_RESULTS[-50:] if len(HISTORICAL_RESULTS) > 50 else HISTORICAL_RESULTS
-                number_exists = num in recent_history
-                
-                if number_exists:
-                    logger.info(f"⚠️ Number {num} already algorithm mein hai. SKIP.")
-                    ALGORITHM_STATS["skipped_duplicate"] = ALGORITHM_STATS.get("skipped_duplicate", 0) + 1
-                    return False
-                
-                detected, should_skip = detect_level4_pattern(num)
-                
-                if detected:
-                    logger.info(f"⚠️ 4-LEVEL DETECTED for {num}! Auto-change activated.")
-                    ALGORITHM_STATS["auto_changes"] += 1
-                    
-                    alternative = random.randint(0, 9)
-                    while alternative == num:
-                        alternative = random.randint(0, 9)
-                    
-                    HISTORICAL_RESULTS.append(alternative)
-                    CLASSIFIED_RESULTS.append({"number": alternative, "size": get_size(alternative)})
-                    logger.info(f"🔄 Auto-changed {num} → {alternative}")
-                    num = alternative
-                else:
-                    HISTORICAL_RESULTS.append(num)
-                    CLASSIFIED_RESULTS.append({"number": num, "size": get_size(num)})
-                    logger.info(f"✅ Naya number add kiya: {num}")
-                
-                if len(HISTORICAL_RESULTS) > 1500:
-                    HISTORICAL_RESULTS.pop(0)
-                    CLASSIFIED_RESULTS.pop(0)
-                
-                ALGORITHM_STATS["added_by_super_admin"] += 1
-                today = datetime.now().date().isoformat()
-                if today not in ALGORITHM_STATS["daily_additions"]:
-                    ALGORITHM_STATS["daily_additions"][today] = 0
-                ALGORITHM_STATS["daily_additions"][today] += 1
-                ALGORITHM_STATS["last_updated"] = datetime.now().isoformat()
-                
-                prev_num = None
-                if len(HISTORICAL_RESULTS) >= 2:
-                    prev_num = HISTORICAL_RESULTS[-2]
-                
-                ALGORITHM_STATS["new_numbers_history"].append({
-                    "number": num,
-                    "size": "BIG" if num >= 5 else "SMALL",
-                    "previous": prev_num,
-                    "time": datetime.now().isoformat(),
-                    "by": "Super Admin"
-                })
-                if len(ALGORITHM_STATS["new_numbers_history"]) > 100:
-                    ALGORITHM_STATS["new_numbers_history"].pop(0)
-                
-                size = "BIG" if num >= 5 else "SMALL"
-                if 'pattern_tracker' not in ALGORITHM_STATS:
-                    ALGORITHM_STATS['pattern_tracker'] = []
-                ALGORITHM_STATS['pattern_tracker'].append({
-                    'number': num,
-                    'size': size,
-                    'time': datetime.now().isoformat()
-                })
-                if len(ALGORITHM_STATS['pattern_tracker']) > 100:
-                    ALGORITHM_STATS['pattern_tracker'].pop(0)
-                
-                logger.info(f"✅ Super Admin number added: {prev_num} → {num}")
-                return True
-            else:
-                ALGORITHM_STATS["skipped_by_players"] += 1
-                logger.info(f"⚠️ Normal player number skipped: {num}")
-                return False
-    except:
-        pass
-    return False
-
-
-def get_big_small_sequence(results, count=20):
-    seq = []
-    for num in results[-count:]:
-        seq.append("BIG" if int(num) >= 5 else "SMALL")
-    return seq
-
-
-def detect_zigzag(seq):
-    if len(seq) < 4:
-        return None
-    last4 = seq[-4:]
-    if last4 == ["BIG", "SMALL", "BIG", "SMALL"]:
-        return "BIG"
-    if last4 == ["SMALL", "BIG", "SMALL", "BIG"]:
-        return "SMALL"
-    return None
-
-
-def detect_2_1_pattern(seq):
-    if len(seq) < 6:
-        return None
-    last6 = seq[-6:]
-    if last6 == ["BIG", "BIG", "SMALL", "BIG", "BIG", "SMALL"]:
-        return "BIG"
-    if last6 == ["SMALL", "SMALL", "BIG", "SMALL", "SMALL", "BIG"]:
-        return "SMALL"
-    return None
-
-
-def detect_streak(seq):
-    if len(seq) < 3:
-        return None
-    last3 = seq[-3:]
-    if last3 == ["BIG", "BIG", "BIG"]:
-        return "BIG"
-    if last3 == ["SMALL", "SMALL", "SMALL"]:
-        return "SMALL"
-    return None
-
-
-def detect_majority(seq):
-    if len(seq) < 10:
-        return None
-    last10 = seq[-10:]
-    big_count = last10.count("BIG")
-    small_count = last10.count("SMALL")
-    if big_count >= 7:
-        return "SMALL"
-    if small_count >= 7:
-        return "BIG"
-    return None
-
-
-def detect_4level_pattern(seq):
-    if len(seq) < 4:
-        return None
-    last4 = seq[-4:]
-    if last4[0] == last4[1] == last4[2] == last4[3]:
-        return last4[0]
-    return None
-
-
-def detect_5level_reverse(seq):
-    if len(seq) < 5:
-        return None
-    last5 = seq[-5:]
-    if last5[0] == last5[1] == last5[2] == last5[3] == last5[4]:
-        return "SMALL" if last5[0] == "BIG" else "BIG"
-    return None
-
-
-def predict_next_with_history():
-    if len(HISTORICAL_RESULTS) < 2:
-        return {"prediction": "BALANCED", "confidence": "50%", "number": None, "pattern": "NONE"}
-    
-    seq = get_big_small_sequence(HISTORICAL_RESULTS, 20)
-    
-    last_number = HISTORICAL_RESULTS[-1]
-    analysis = get_prediction_with_analysis(last_number)
-    
-    def get_target_num(pred_size):
-        if analysis['candidates']:
-            for cand in analysis['candidates']:
-                if cand['size'] == pred_size:
-                    return cand['number']
-        if pred_size == "BIG":
-            return random.randint(5, 9)
-        else:
-            return random.randint(0, 4)
-    
-    # PRIORITY 1: 5-Level Reverse
-    reverse_5 = detect_5level_reverse(seq)
-    if reverse_5:
-        return {
-            "prediction": reverse_5,
-            "number": get_target_num(reverse_5),
-            "confidence": "90%",
-            "pattern": "5-LEVEL REVERSE",
-            "frequency": 1,
-            "total_matches": 1,
-            "candidates": analysis['candidates'] if analysis['candidates'] else []
-        }
-    
-    # PRIORITY 2: 4-Level Streak
-    streak_4 = detect_4level_pattern(seq)
-    if streak_4:
-        return {
-            "prediction": streak_4,
-            "number": get_target_num(streak_4),
-            "confidence": "88%",
-            "pattern": "4-LEVEL STREAK",
-            "frequency": 1,
-            "total_matches": 1,
-            "candidates": analysis['candidates'] if analysis['candidates'] else []
-        }
-    
-    # PRIORITY 3: 3-Level Streak
-    streak_3 = detect_streak(seq)
-    if streak_3:
-        return {
-            "prediction": streak_3,
-            "number": get_target_num(streak_3),
-            "confidence": "82%",
-            "pattern": "3-LEVEL STREAK",
-            "frequency": 1,
-            "total_matches": 1,
-            "candidates": analysis['candidates'] if analysis['candidates'] else []
-        }
-    
-    # PRIORITY 4: Zig-Zag
-    zigzag_pred = detect_zigzag(seq)
-    if zigzag_pred:
-        return {
-            "prediction": zigzag_pred,
-            "number": get_target_num(zigzag_pred),
-            "confidence": "85%",
-            "pattern": "ZIG-ZAG",
-            "frequency": 1,
-            "total_matches": 1,
-            "candidates": analysis['candidates'] if analysis['candidates'] else []
-        }
-    
-    # PRIORITY 5: 2-1 Pattern
-    pattern_2_1 = detect_2_1_pattern(seq)
-    if pattern_2_1:
-        return {
-            "prediction": pattern_2_1,
-            "number": get_target_num(pattern_2_1),
-            "confidence": "78%",
-            "pattern": "2-1 PATTERN",
-            "frequency": 1,
-            "total_matches": 1,
-            "candidates": analysis['candidates'] if analysis['candidates'] else []
-        }
-    
-    # PRIORITY 6: Majority Reversal
-    majority_pred = detect_majority(seq)
-    if majority_pred:
-        return {
-            "prediction": majority_pred,
-            "number": get_target_num(majority_pred),
-            "confidence": "62%",
-            "pattern": "MAJORITY REVERSAL",
-            "frequency": 1,
-            "total_matches": 1,
-            "candidates": analysis['candidates'] if analysis['candidates'] else []
-        }
-    
-    # PRIORITY 7: Historical Fallback
-    if not analysis['candidates']:
-        return {"prediction": "BALANCED", "confidence": "50%", "number": None, "pattern": "NONE"}
-    
-    top = analysis['candidates'][0]
-    confidence = min(int((top['count'] / analysis['total_matches']) * 100), 95)
-    
-    return {
-        "prediction": top['size'],
-        "number": top['number'],
-        "confidence": f"{confidence}%",
-        "pattern": "HISTORICAL",
-        "frequency": top['count'],
-        "total_matches": analysis['total_matches'],
-        "candidates": analysis['candidates']
-    }def add_result_to_history(number, is_super_admin=False):
-    try:
-        num = int(number)
-        if 0 <= num <= 9:
-            if is_super_admin:
-                recent_history = HISTORICAL_RESULTS[-50:] if len(HISTORICAL_RESULTS) > 50 else HISTORICAL_RESULTS
-                number_exists = num in recent_history
-                
-                if number_exists:
-                    logger.info(f"⚠️ Number {num} already algorithm mein hai. SKIP.")
-                    ALGORITHM_STATS["skipped_duplicate"] = ALGORITHM_STATS.get("skipped_duplicate", 0) + 1
-                    return False
-                
-                detected, should_skip = detect_level4_pattern(num)
-                
-                if detected:
-                    logger.info(f"⚠️ 4-LEVEL DETECTED for {num}! Auto-change activated.")
-                    ALGORITHM_STATS["auto_changes"] += 1
-                    
-                    alternative = random.randint(0, 9)
-                    while alternative == num:
-                        alternative = random.randint(0, 9)
-                    
-                    HISTORICAL_RESULTS.append(alternative)
-                    CLASSIFIED_RESULTS.append({"number": alternative, "size": get_size(alternative)})
-                    logger.info(f"🔄 Auto-changed {num} → {alternative}")
-                    num = alternative
-                else:
-                    HISTORICAL_RESULTS.append(num)
-                    CLASSIFIED_RESULTS.append({"number": num, "size": get_size(num)})
-                    logger.info(f"✅ Naya number add kiya: {num}")
-                
-                if len(HISTORICAL_RESULTS) > 1500:
-                    HISTORICAL_RESULTS.pop(0)
-                    CLASSIFIED_RESULTS.pop(0)
-                
-                ALGORITHM_STATS["added_by_super_admin"] += 1
-                today = datetime.now().date().isoformat()
-                if today not in ALGORITHM_STATS["daily_additions"]:
-                    ALGORITHM_STATS["daily_additions"][today] = 0
-                ALGORITHM_STATS["daily_additions"][today] += 1
-                ALGORITHM_STATS["last_updated"] = datetime.now().isoformat()
-                
-                prev_num = None
-                if len(HISTORICAL_RESULTS) >= 2:
-                    prev_num = HISTORICAL_RESULTS[-2]
-                
-                ALGORITHM_STATS["new_numbers_history"].append({
-                    "number": num,
-                    "size": "BIG" if num >= 5 else "SMALL",
-                    "previous": prev_num,
-                    "time": datetime.now().isoformat(),
-                    "by": "Super Admin"
-                })
-                if len(ALGORITHM_STATS["new_numbers_history"]) > 100:
-                    ALGORITHM_STATS["new_numbers_history"].pop(0)
-                
-                size = "BIG" if num >= 5 else "SMALL"
-                if 'pattern_tracker' not in ALGORITHM_STATS:
-                    ALGORITHM_STATS['pattern_tracker'] = []
-                ALGORITHM_STATS['pattern_tracker'].append({
-                    'number': num,
-                    'size': size,
-                    'time': datetime.now().isoformat()
-                })
-                if len(ALGORITHM_STATS['pattern_tracker']) > 100:
-                    ALGORITHM_STATS['pattern_tracker'].pop(0)
-                
-                logger.info(f"✅ Super Admin number added: {prev_num} → {num}")
-                return True
-            else:
-                ALGORITHM_STATS["skipped_by_players"] += 1
-                logger.info(f"⚠️ Normal player number skipped: {num}")
-                return False
-    except:
-        pass
-    return False
-
-
-def get_big_small_sequence(results, count=20):
-    seq = []
-    for num in results[-count:]:
-        seq.append("BIG" if int(num) >= 5 else "SMALL")
-    return seq
-
-
-def detect_zigzag(seq):
-    if len(seq) < 4:
-        return None
-    last4 = seq[-4:]
-    if last4 == ["BIG", "SMALL", "BIG", "SMALL"]:
-        return "BIG"
-    if last4 == ["SMALL", "BIG", "SMALL", "BIG"]:
-        return "SMALL"
-    return None
-
-
-def detect_2_1_pattern(seq):
-    if len(seq) < 6:
-        return None
-    last6 = seq[-6:]
-    if last6 == ["BIG", "BIG", "SMALL", "BIG", "BIG", "SMALL"]:
-        return "BIG"
-    if last6 == ["SMALL", "SMALL", "BIG", "SMALL", "SMALL", "BIG"]:
-        return "SMALL"
-    return None
-
-
-def detect_streak(seq):
-    if len(seq) < 3:
-        return None
-    last3 = seq[-3:]
-    if last3 == ["BIG", "BIG", "BIG"]:
-        return "BIG"
-    if last3 == ["SMALL", "SMALL", "SMALL"]:
-        return "SMALL"
-    return None
-
-
-def detect_majority(seq):
-    if len(seq) < 10:
-        return None
-    last10 = seq[-10:]
-    big_count = last10.count("BIG")
-    small_count = last10.count("SMALL")
-    if big_count >= 7:
-        return "SMALL"
-    if small_count >= 7:
-        return "BIG"
-    return None
-
-
-def detect_4level_pattern(seq):
-    if len(seq) < 4:
-        return None
-    last4 = seq[-4:]
-    if last4[0] == last4[1] == last4[2] == last4[3]:
-        return last4[0]
-    return None
-
-
-def detect_5level_reverse(seq):
-    if len(seq) < 5:
-        return None
-    last5 = seq[-5:]
-    if last5[0] == last5[1] == last5[2] == last5[3] == last5[4]:
-        return "SMALL" if last5[0] == "BIG" else "BIG"
-    return None
-
 
 def predict_next_with_history():
     if len(HISTORICAL_RESULTS) < 2:
@@ -3839,9 +2578,6 @@ async def accuss_vip(update, context):
     try:
         logger.info(f"🎮 ACCUSS VIP triggered by user {update.effective_user.id}")
         
-        # ==========================================
-        # STEP 1: VALID LINKS FILTER KARO
-        # ==========================================
         keyboard = []
         valid_links_count = 0
         
@@ -3855,9 +2591,6 @@ async def accuss_vip(update, context):
             else:
                 logger.warning(f"⚠️ Invalid/placeholder link skipped: {link['name']} → {url}")
         
-        # ==========================================
-        # STEP 2: LINKS WALA MESSAGE BHEJO
-        # ==========================================
         if valid_links_count > 0:
             try:
                 await update.message.reply_text(
@@ -3865,15 +2598,15 @@ async def accuss_vip(update, context):
                     "━━━━━━━━━━━━━━━━━━━━━━\n\n"
                     "👇 Niche diye gaye link se apna ID banao\n"
                     "💰 ₹300 deposit karo\n"
-                 "📸 Screenshot bhejo\n"
-"✅ VIP activate ho jayega\n\n"
-"━━━━━━━━━━━━━━━━━━━━━━\n"
-"⚠️ IMPORTANT RULES:\n"
-"├─ 🎯 Minimum 10 plays DAILY karo\n"
-"├─ ⏰ 3 din tak inactive rahe toh VIP CANCEL\n"
-"└─ 🔥 Daily 10+ plays = LIFETIME VIP\n\n"
-"━━━━━━━━━━━━━━━━━━━━━━\n"
-"🎯 Select Your Game:",
+                    "📸 Screenshot bhejo\n"
+                    "✅ VIP activate ho jayega\n\n"
+                    "━━━━━━━━━━━━━━━━━━━━━━\n"
+                    "⚠️ IMPORTANT RULES:\n"
+                    "├─ 🎯 Minimum 10 plays DAILY karo\n"
+                    "├─ ⏰ 3 din tak inactive rahe toh VIP CANCEL\n"
+                    "└─ 🔥 Daily 10+ plays = LIFETIME VIP\n\n"
+                    "━━━━━━━━━━━━━━━━━━━━━━\n"
+                    "🎯 Select Your Game:",
                     reply_markup=InlineKeyboardMarkup(keyboard)
                 )
                 logger.info(f"✅ ACCUSS VIP text sent with {valid_links_count} valid links")
@@ -3896,9 +2629,6 @@ async def accuss_vip(update, context):
                 parse_mode='Markdown'
             )
         
-        # ==========================================
-        # STEP 3: 1 SECOND WAIT, PHIR VOICE BHEJO
-        # ==========================================
         await asyncio.sleep(1)
         
         voice_sent = False
@@ -8020,9 +6750,6 @@ async def error_handler(update, context):
 def main():
     load_all_data()
     
-    # ==========================================
-    # 📁 DEBUG: FILES LIST
-    # ==========================================
     print("=" * 50)
     print("📁 FILES IN CURRENT DIRECTORY:")
     try:
