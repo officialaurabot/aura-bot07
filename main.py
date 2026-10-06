@@ -1915,7 +1915,7 @@ def predict_next_with_history():
         else:
             return random.randint(0, 4)
     
-    # PRIORITY 1: 5-Level Reverse
+        # PRIORITY 1: 5-Level Reverse
     reverse_5 = detect_5level_reverse(seq)
     if reverse_5:
         return {
@@ -2008,7 +2008,10 @@ def predict_next_with_history():
         "frequency": top['count'],
         "total_matches": analysis['total_matches'],
         "candidates": analysis['candidates']
-    }def add_result_to_history(number, is_super_admin=False):
+    }
+
+
+def add_result_to_history(number, is_super_admin=False):
     try:
         num = int(number)
         if 0 <= num <= 9:
