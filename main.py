@@ -1,5 +1,5 @@
 # ==========================================
-# 🌌 AURA BOT v14.0 - COMPLETE FIXED + 3-LEVEL SYSTEM
+# 🌌 AURA BOT v14.0 - COMPLETE FIXED
 # ==========================================
 
 import logging
@@ -57,20 +57,6 @@ DAILY_MIN_PLAYS = 10        # Minimum daily plays for lifetime VIP
 INACTIVE_DAYS_LIMIT = 3     # 3 din inactive = VIP cancel
 INITIAL_VIP_DAYS = 3        # Initial VIP 3 din
 VIP_CHECK_INTERVAL = 21600  # Har 6 ghante check (seconds)
-
-# ==========================================
-# ⭐ 3-LEVEL WIN SYSTEM + ZIG-ZAG
-# ==========================================
-LEVEL_BETS = [5, 15, 35]
-MAX_LEVEL = 3
-SESSION_TRACKER = {}
-
-ZIGZAG_TRACKER = {
-    "last_pattern": [],
-    "prediction": None,
-    "confidence": 0,
-    "last_10": []
-}
 
 # ==========================================
 # ⭐ ACCUSS VIP - GAMER LINKS & VOICE
@@ -211,14 +197,6 @@ ALGORITHM_HISTORY = [
         "added_by": "System",
         "date": "2026-10-06",
         "status": "active"
-    },
-    {
-        "version": "v16.0",
-        "name": "3-Level Win System + Session Tracker",
-        "description": "3-Level Bet System: Level 1 (₹5), Level 2 (₹15), Level 3 (₹35). WIN = Session Band. LOSS = Level +1. 3-Level Loss = Bot RUKO. Session auto reset on /start.",
-        "added_by": "System",
-        "date": "2026-10-06",
-        "status": "active"
     }
 ]
 
@@ -257,7 +235,6 @@ ALGORITHM_STATS = {
     "level4_detections": 0,
     "auto_changes": 0
 }
-
 # ==========================================
 # ⭐ CONCURRENT PLAYERS LOCK (OPTIMIZED FOR 200+)
 # ==========================================
@@ -346,73 +323,6 @@ def safe_load_json(filename):
     return {}
 
 # ==========================================
-# ⭐ SESSION MANAGEMENT (3-LEVEL WIN SYSTEM)
-# ==========================================
-def get_session(uid):
-    if uid not in SESSION_TRACKER:
-        SESSION_TRACKER[uid] = {
-            "level": 1,
-            "session_wins": 0,
-            "session_losses": 0,
-            "session_stopped": False,
-            "started_at": datetime.now().isoformat()
-        }
-    return SESSION_TRACKER[uid]
-
-def reset_session(uid):
-    SESSION_TRACKER[uid] = {
-        "level": 1,
-        "session_wins": 0,
-        "session_losses": 0,
-        "session_stopped": False,
-        "started_at": datetime.now().isoformat()
-    }
-    return SESSION_TRACKER[uid]
-
-def get_current_bet(uid):
-    session = get_session(uid)
-    level = session.get("level", 1)
-    idx = min(level - 1, len(LEVEL_BETS) - 1)
-    return LEVEL_BETS[idx]
-
-def update_session_after_result(uid, win):
-    session = get_session(uid)
-    if win:
-        session["session_wins"] += 1
-        session["session_stopped"] = True
-        return True, "✅ SESSION BAND (WIN - Target Hit)"
-    else:
-        session["session_losses"] += 1
-        if session["level"] >= MAX_LEVEL:
-            session["session_stopped"] = True
-            return True, "🛑 3 LEVEL LOSS - BOT RUKO"
-        else:
-            session["level"] += 1
-            new_bet = get_current_bet(uid)
-            return False, f"⬆️ LEVEL {session['level']} (Bet: ₹{new_bet})"
-
-def is_session_active(uid):
-    return not get_session(uid).get("session_stopped", False)
-
-def get_session_banner(uid):
-    session = get_session(uid)
-    level = session.get("level", 1)
-    bet = get_current_bet(uid)
-    wins = session.get("session_wins", 0)
-    losses = session.get("session_losses", 0)
-    status = "🛑 STOPPED" if session.get("session_stopped") else f"🎯 LEVEL {level}"
-    return f"""
-🎮 *SESSION STATUS*
-━━━━━━━━━━━━━━━━━━━━━━
-├─ 📊 Status   :: {status}
-├─ 💰 Bet      :: ₹{bet}
-├─ 🏆 Wins     :: {wins}
-├─ ❌ Losses   :: {losses}
-└─ 🎯 Max Level :: {MAX_LEVEL}
-━━━━━━━━━━━━━━━━━━━━━━
-"""
-
-# ==========================================
 # ⭐ LEVEL SYSTEM - SINGLE LEVEL
 # ==========================================
 def calculate_level(current_level, win):
@@ -493,25 +403,14 @@ async def daily_bonus(update, context):
     
     async with get_user_lock(uid):
         users = safe_load_json("users.json")
-        if uid not in users:
-            users[uid] = {
-                "id": uid,
-                "win_count": 0,
-                "loss_count": 0,
-                "level": 1,
-                "joined": str(datetime.now()),
-                "username": update.effective_user.username or "Unknown",
-                "achievements": {"unlocked": []},
-                "last_active": datetime.now().isoformat()
-            }
-        users[uid]['win_count'] = users[uid].get('win_count', 0) + bonus
-        await safe_save_json("users.json", users)
-        total_wins = users[uid]['win_count']
+        if uid in users:
+            users[uid]['win_count'] = users[uid].get('win_count', 0) + bonus
+            await safe_save_json("users.json", users)
     
     DAILY_BONUS_TRACKER[uid]['last_claimed'] = today
     
     await update.message.reply_text(
-        f"🎁 *DAILY BONUS CLAIMED!* 🎁\n━━━━━━━━━━━━━━━━━━━━━━\n✅ +{bonus} Free Wins!\n📊 Total Wins: {total_wins}\n━━━━━━━━━━━━━━━━━━━━━━\n🔥 Come back tomorrow for more!",
+        f"🎁 *DAILY BONUS CLAIMED!* 🎁\n━━━━━━━━━━━━━━━━━━━━━━\n✅ +{bonus} Free Wins!\n📊 Total Wins: {users[uid]['win_count']}\n━━━━━━━━━━━━━━━━━━━━━━\n🔥 Come back tomorrow for more!",
         parse_mode='Markdown'
     )
 
@@ -1782,63 +1681,69 @@ def detect_5level_reverse(seq):
 # ⭐ ZIG-ZAG ALGORITHM (NEW)
 # ==========================================
 def get_zigzag_prediction():
-    """Last 10 results se zig-zag prediction nikalo"""
-    if len(HISTORICAL_RESULTS) < 10:
+    """
+    Last 10 numbers se zig-zag prediction nikalo.
+    Example: 4-6-3-7-3-9 → S-B-S-B-S-B → Next: S
+    """
+    if len(HISTORICAL_RESULTS) < 6:
         return {"prediction": random.choice(["BIG", "SMALL"]), "pattern": "N/A", "confidence": 50}
     
     last_10 = HISTORICAL_RESULTS[-10:]
     seq = ["B" if n >= 5 else "S" for n in last_10]
     
-    ZIGZAG_TRACKER["last_10"] = seq
-    
+    # CHECK 1: PERFECT ZIG-ZAG (Last 4)
     if len(seq) >= 4:
         last4 = seq[-4:]
         if last4 == ["B", "S", "B", "S"]:
-            return {"prediction": "BIG", "pattern": "ZIG-ZAG (B-S-B-S)", "confidence": 85}
+            return {"prediction": "BIG", "pattern": "ZIG-ZAG (B-S-B-S)", "confidence": 88}
         if last4 == ["S", "B", "S", "B"]:
-            return {"prediction": "SMALL", "pattern": "ZIG-ZAG (S-B-S-B)", "confidence": 85}
+            return {"prediction": "SMALL", "pattern": "ZIG-ZAG (S-B-S-B)", "confidence": 88}
     
+    # CHECK 2: ZIG-ZAG (Last 6)
+    if len(seq) >= 6:
+        last6 = seq[-6:]
+        if last6 == ["B", "S", "B", "S", "B", "S"]:
+            return {"prediction": "BIG", "pattern": "ZIG-ZAG x6", "confidence": 90}
+        if last6 == ["S", "B", "S", "B", "S", "B"]:
+            return {"prediction": "SMALL", "pattern": "ZIG-ZAG x6", "confidence": 90}
+    
+    # CHECK 3: ZIG-ZAG (Last 5)
+    if len(seq) >= 5:
+        last5 = seq[-5:]
+        if last5 == ["B", "S", "B", "S", "B"]:
+            return {"prediction": "SMALL", "pattern": "ZIG-ZAG 5", "confidence": 85}
+        if last5 == ["S", "B", "S", "B", "S"]:
+            return {"prediction": "BIG", "pattern": "ZIG-ZAG 5", "confidence": 85}
+    
+    # CHECK 4: 2-1 PATTERN
     if len(seq) >= 6:
         last6 = seq[-6:]
         if last6 == ["B", "B", "S", "B", "B", "S"]:
-            return {"prediction": "BIG", "pattern": "2-1 PATTERN", "confidence": 78}
+            return {"prediction": "BIG", "pattern": "2-1 PATTERN", "confidence": 80}
         if last6 == ["S", "S", "B", "S", "S", "B"]:
-            return {"prediction": "SMALL", "pattern": "2-1 PATTERN", "confidence": 78}
+            return {"prediction": "SMALL", "pattern": "2-1 PATTERN", "confidence": 80}
     
+    # CHECK 5: 3-STREAK REVERSE
     if len(seq) >= 3:
         last3 = seq[-3:]
         if last3 == ["B", "B", "B"]:
-            return {"prediction": "BIG", "pattern": "3-STREAK", "confidence": 82}
+            return {"prediction": "SMALL", "pattern": "3-STREAK REVERSE", "confidence": 75}
         if last3 == ["S", "S", "S"]:
-            return {"prediction": "SMALL", "pattern": "3-STREAK", "confidence": 82}
+            return {"prediction": "BIG", "pattern": "3-STREAK REVERSE", "confidence": 75}
     
-    if len(seq) >= 4:
-        last4 = seq[-4:]
-        if last4[0] == last4[1] == last4[2] == last4[3]:
-            pred = "BIG" if last4[0] == "B" else "SMALL"
-            return {"prediction": pred, "pattern": "4-STREAK", "confidence": 88}
-    
-    if len(seq) >= 5:
-        last5 = seq[-5:]
-        if last5[0] == last5[1] == last5[2] == last5[3] == last5[4]:
-            opp = "SMALL" if last5[0] == "B" else "BIG"
-            return {"prediction": opp, "pattern": "5-REVERSE", "confidence": 90}
-    
-    if len(seq) >= 7:
-        last7 = seq[-7:]
-        b_count = last7.count("B")
-        s_count = last7.count("S")
-        if b_count >= 5:
-            return {"prediction": "SMALL", "pattern": "MAJORITY REVERSAL", "confidence": 62}
-        if s_count >= 5:
-            return {"prediction": "BIG", "pattern": "MAJORITY REVERSAL", "confidence": 62}
-    
+    # DEFAULT
     opp = "SMALL" if seq[-1] == "B" else "BIG"
-    return {"prediction": opp, "pattern": "DEFAULT (OPPOSITE)", "confidence": 55}
+    return {"prediction": opp, "pattern": "DEFAULT", "confidence": 60}
 
 def predict_next_with_history():
     if len(HISTORICAL_RESULTS) < 2:
         return {"prediction": "BALANCED", "confidence": "50%", "number": None, "pattern": "NONE"}
+    
+    # ⭐ ZIG-ZAG PRIORITY (Sabse Pehle Check)
+    zigzag_result = get_zigzag_prediction()
+    zigzag_prediction = zigzag_result["prediction"]
+    zigzag_pattern = zigzag_result["pattern"]
+    zigzag_confidence = zigzag_result["confidence"]
     
     seq = get_big_small_sequence(HISTORICAL_RESULTS, 20)
     
@@ -1854,6 +1759,18 @@ def predict_next_with_history():
             return random.randint(5, 9)
         else:
             return random.randint(0, 4)
+    
+    # ⭐ ZIG-ZAG Check (Priority 1)
+    if zigzag_confidence >= 75:
+        return {
+            "prediction": zigzag_prediction,
+            "number": get_target_num(zigzag_prediction),
+            "confidence": f"{zigzag_confidence}%",
+            "pattern": zigzag_pattern,
+            "frequency": 1,
+            "total_matches": 1,
+            "candidates": analysis['candidates'] if analysis['candidates'] else []
+        }
     
     reverse_5 = detect_5level_reverse(seq)
     if reverse_5:
@@ -3968,10 +3885,6 @@ async def start_button(update, context):
         is_vip = uid in vip and datetime.fromisoformat(vip[uid]['expiry']) > datetime.now()
         is_verified = context.user_data.get('verified', False)
         
-        # ⭐ NEW: Reset session on start
-        reset_session(uid)
-        logger.info(f"✅ New session started for {uid}")
-        
         async with get_user_lock(uid):
             users = safe_load_json("users.json")
             if uid in users:
@@ -5878,35 +5791,16 @@ async def super_admin_play(update, context):
             await update.message.reply_text("❌ Only Super Admin can access this!")
             return
         
-        # ⭐ SESSION CHECK
-        session = get_session(uid)
-        if session.get("session_stopped"):
-            await update.message.reply_text(
-                f"""🛑 *SESSION BAND!*
-━━━━━━━━━━━━━━━━━━━━━━
-Aaj ka session khatam ho gaya.
-Naya session start karne ke liye /start karo.
-
-{get_session_banner(uid)}""",
-                parse_mode='Markdown'
-            )
-            return
-        
         context.user_data.clear()
         context.user_data['super_admin_play'] = True
         context.user_data['waiting_result_number'] = True
-        
-        current_bet = get_current_bet(uid)
-        current_level = session.get("level", 1)
         
         banner = get_result_banner()
         await update.message.reply_text(
             f"""👑 *SUPER ADMIN PLAY MODE*
 ━━━━━━━━━━━━━━━━━━━━━━
 ⚠️ *Aapka number INSTANTLY algorithm mein add hoga!*
-
-{get_session_banner(uid)}
-💰 *Aapka Bet Amount: ₹{current_bet}*
+━━━━━━━━━━━━━━━━━━━━━━
 
 {banner}""",
             parse_mode='Markdown',
@@ -6165,11 +6059,7 @@ async def process_analysis(update, context, uid, periods=None, last_period=None)
         }
         
         banner = get_analysis_banner(current_period, category, num1, num2)
-        session_banner = get_session_banner(uid)
-        await update.message.reply_text(
-            f"{banner}\n{session_banner}",
-            reply_markup=result_keyboard
-        )
+        await update.message.reply_text(banner, reply_markup=result_keyboard)
         context.user_data['waiting_result'] = True
         
     except Exception as e:
@@ -6186,22 +6076,6 @@ async def handle_result(update, context):
         
         if not context.user_data.get('waiting_result'):
             return
-        
-        # ⭐ SESSION CHECK
-        session = get_session(uid)
-        if session.get("session_stopped"):
-            await update.message.reply_text(
-                f"""🛑 *SESSION BAND!*
-━━━━━━━━━━━━━━━━━━━━━━
-Naya session start karne ke liye 🏠 HOME dabao.
-
-{get_session_banner(uid)}""",
-                parse_mode='Markdown'
-            )
-            return
-        
-        current_level_before = session.get("level", 1)
-        current_bet = get_current_bet(uid)
         
         last = context.user_data.get('last_analysis', {})
         period = last.get('period', '0000')
@@ -6244,9 +6118,6 @@ Naya session start karne ke liye 🏠 HOME dabao.
             else:
                 win = False
                 result_text = "💪 KEEP GOING!"
-            
-            # ⭐ SESSION UPDATE
-            session_stopped, session_msg = update_session_after_result(uid, win)
             
             is_super_admin = uid in SUPER_ADMIN_IDS_STR
             
@@ -6440,18 +6311,7 @@ Naya session start karne ke liye 🏠 HOME dabao.
                 player_result=final_trend
             )
             
-            # ⭐ SESSION INFO IN RESULT
-            session_info = f"""
-━━━━━━━━━━━━━━━━━━━━━━
-🎯 *LEVEL {current_level_before}* | 💰 *Bet: ₹{current_bet}*
-{session_msg}
-━━━━━━━━━━━━━━━━━━━━━━
-"""
-            
-            await update.message.reply_text(
-                f"{result_text}\n{session_info}\n{banner}",
-                reply_markup=result_keyboard
-            )
+            await update.message.reply_text(f"{result_text}\n{banner}", reply_markup=result_keyboard)
             context.user_data['last_analysis'] = {
                 "trend": next_trend,
                 "num1": next_num1,
@@ -7104,9 +6964,7 @@ def main():
     print("🕐 LAST ACTIVE: ENABLED")
     print("🎮 ACCUSS VIP: ENABLED (4 Gamer Links + Voice Note - FIXED)")
     print("✅ LINK PEHLE, PHIR VOICE: ENABLED")
-    print("🎯 3-LEVEL WIN SYSTEM: ENABLED (₹5, ₹15, ₹35)")
-    print("🎯 ZIG-ZAG ALGORITHM: ENABLED")
-    print("🎯 SESSION TRACKER: ENABLED (Auto Reset on /start)")
+    print("✅ ZIG-ZAG ALGORITHM: ADDED (4-6-3-7-3-9 → S-B-S-B-S-B)")
     print("✅ ALL ERRORS FIXED")
     print("=" * 50)
     app.run_polling()
